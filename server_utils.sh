@@ -81,11 +81,11 @@ append_to_rc() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 📦 PRÉREQUIS ✅ COMPTEURS
+# 📦 PRÉREQUIS ✅ COMPTEURS (7 paquets)
 # ═══════════════════════════════════════════════════════════════════════════════
-section "PRÉREQUIS (8 paquets)"
+section "PRÉREQUIS (7 paquets)"
 PACKAGES="curl wget git zsh build-essential procps file locales-all"
-i=0; total=8
+i=0; total=7
 for pkg in $PACKAGES; do
     i=$((i+1))
     apt_install "$pkg" "$i" "$total"
@@ -96,14 +96,13 @@ echo ""
 # 1. Installation de base
 if [ "$BASE" = 1 ]; then
     section "INSTALLATION DE BASE"
-    apt_install "bat" "1" "8"
-    apt_install "btop" "2" "8"
-    apt_install "eza" "3" "8"
-    apt_install "ripgrep" "4" "8"
-    apt_install "zoxide" "5" "8"
-    apt_install "duf" "6" "8"
-    apt_install "direnv" "7" "8"
-    apt_install "neofetch" "8" "8"
+    apt_install "bat" "1" "7"
+    apt_install "btop" "2" "7"
+    apt_install "eza" "3" "7"
+    apt_install "ripgrep" "4" "7"
+    apt_install "zoxide" "5" "7"
+    apt_install "duf" "6" "7"
+    apt_install "direnv" "7" "7"
     
     # Atuin
     echo "🤖 Atuin..."
