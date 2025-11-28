@@ -309,14 +309,4 @@ echo ""
 echo "🎉 Installation terminée ! Redémarrez votre session pour charger Zsh."
 echo "   • Lancez 'zsh' pour tester immédiatement"
 echo "   • Vérifiez ~/.zshrc pour les personnalisations"
-echo "   • Atuin: 'atuin register' pour synchroniser"[attached_file:1]
-
-## ✅ ERREURS CORRIGÉES
-
-**1. Mise à jour système :** `IS_VERBOSE=1` gère correctement les redirections
-**2. Atuin :** Installé dans `/root/.atuin/bin` (normal), `command -v` retiré[attached_file:1]
-**3. Cheat ARM64 :** Utilise `cheat-linux-aarch64.gz` + pipe direct wget/curl
-**4. Bat :** `bat` (pas `batcat`) sur Debian moderne
-**5. Micro :** `cd /usr/local/bin` avant install
-
-**🚀 Script maintenant 100% fonctionnel sur ARM64/Debian !**
+echo "   • Atuin: 'atuin register' pour synchroniser"
