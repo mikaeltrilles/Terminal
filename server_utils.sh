@@ -63,29 +63,47 @@ section() {
 }
 
 apt_install() {
+    local pkg="$1" count="$2" total="$3"
     sudo apt-get update >/dev/null 2>&1
-    sudo apt-get install -y "$1" >/dev/null 2>&1
-    echo "✅ $1 installé"
+    if sudo apt-get install -y "$pkg" >/dev/null 2>&1; then
+        echo "   ($count/$total) ✅ $pkg"
+    else
+        echo "   ($count/$total) ❌ $pkg"
+    fi
 }
 
 append_to_rc() {
     local file="$HOME_DIR/.$(basename "$1")"
     echo "# $(date): $2" >> "$file"
     echo "$3" >> "$file"
+    sudo chown "$CURRENT_USER:$CURRENT_USER" "$file"
     echo "✅ $file mis à jour"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 📦 PRÉREQUIS
+# 📦 PRÉREQUIS ✅ COMPTEURS
 # ═══════════════════════════════════════════════════════════════════════════════
-section "PRÉREQUIS"
-apt_install "curl wget git zsh build-essential procps file locales-all"
+section "PRÉREQUIS (8 paquets)"
+PACKAGES="curl wget git zsh build-essential procps file locales-all"
+i=0; total=8
+for pkg in $PACKAGES; do
+    i=$((i+1))
+    apt_install "$pkg" "$i" "$total"
+done
+echo " ✅ Tous les prérequis installés !"
 echo ""
 
 # 1. Installation de base
 if [ "$BASE" = 1 ]; then
     section "INSTALLATION DE BASE"
-    apt_install "zsh bat btop eza ripgrep zoxide duf direnv neofetch"
+    apt_install "bat" "1" "8"
+    apt_install "btop" "2" "8"
+    apt_install "eza" "3" "8"
+    apt_install "ripgrep" "4" "8"
+    apt_install "zoxide" "5" "8"
+    apt_install "duf" "6" "8"
+    apt_install "direnv" "7" "8"
+    apt_install "neofetch" "8" "8"
     
     # Atuin
     echo "🤖 Atuin..."
@@ -94,6 +112,7 @@ if [ "$BASE" = 1 ]; then
     
     # Micro
     echo "🤖 Micro..."
+    sudo mkdir -p /usr/local/bin
     cd /usr/local/bin && curl https://getmic.ro | bash
     echo "✅ Micro installé"
     echo ""
@@ -106,11 +125,12 @@ if [ "$OMZ" = 1 ]; then
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
     
     # Copie vers utilisateur actif
-    sudo cp -rf /root/.oh-my-zsh "$HOME_DIR/"
-    sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$HOME_DIR/.oh-my-zsh"
+    sudo cp -rf /root/.oh-my-zsh "$HOME_DIR/" 2>/dev/null || true
+    sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$HOME_DIR/.oh-my-zsh" 2>/dev/null || true
     
     # Thème agnoster + plugins
-    sed -i 's/robbyrussell/agnoster/g' "$HOME_DIR/.zshrc"
+    sudo -u "$CURRENT_USER" bash -c "mkdir -p '$HOME_DIR/.oh-my-zsh/custom/plugins'"
+    sed -i 's/robbyrussell/agnoster/g' "$HOME_DIR/.zshrc" 2>/dev/null || true
     
     # Plugins
     sudo -u "$CURRENT_USER" git clone https://github.com/zsh-users/zsh-autosuggestions "$HOME_DIR/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
@@ -126,14 +146,17 @@ if [ "$OMZ" = 1 ]; then
         echo 'alias grep=rg'
         echo 'eval "$(zoxide init zsh)"'
         echo 'eval "$(direnv hook zsh)"'
+        echo 'alias relbash="source ~/.zshrc"'
+        echo 'alias zshconfig="nano ~/.zshrc"'
+        echo 'maj() { echo "🍓  Mise à jour complète Raspberry Pi OS 🍀"; echo "──────────────────────────────────────────"; echo -e "\n📦  Mise à jour des dépôts APT..."; sudo apt-get update -y; echo -e "\n⚙️  Installation des mises à jour disponibles..."; sudo apt-get upgrade -y; echo -e "\n🚀  Mise à niveau de la distribution..."; sudo apt-get dist-upgrade -y; echo -e "\n🔧  Mise à jour du firmware Raspberry Pi..."; sudo rpi-update; echo -e "\n🧹  Nettoyage des paquets obsolètes..."; sudo apt-get autoremove -y; sudo apt-get autoclean -y; sudo apt-get clean; echo -e "\n☕️  Mise à jour Homebrew..."; brew update; echo -e "\n📦  Mise à niveau des paquets Homebrew..."; brew upgrade; echo -e "\n🧹  Nettoyage Homebrew..."; brew autoremove; echo -e "\n🏁  Mise à jour terminée avec succès ! 🎉"; echo "──────────────────────────────────────────"; }'
     } >> "$HOME_DIR/.zshrc"
     
     sudo chown "$CURRENT_USER:$CURRENT_USER" "$HOME_DIR/.zshrc"
-    echo "✅ Oh My Zsh + plugins pour $CURRENT_USER"
+    echo "✅ Oh My Zsh + plugins + aliases pour $CURRENT_USER"
     echo ""
 fi
 
-# 3. Homebrew
+# 3. Homebrew ✅ OFFICIEL
 if [ "$BREW" = 1 ]; then
     section "HOMEBREW (Linux)"
     if command -v brew >/dev/null 2>&1; then
@@ -142,13 +165,16 @@ if [ "$BREW" = 1 ]; then
         echo "🤖 Homebrew pour $CURRENT_USER..."
         NONINTERACTIVE=1 sudo -u "$CURRENT_USER" /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         
-        # Ajout au PATH
-        {
-            echo 'export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"'
-            echo 'export PATH="/home/linuxbrew/.linuxbrew/sbin:$PATH"'
-        } >> "$HOME_DIR/.zshrc"
-        
+        # Next steps OFFICIELS
+        echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> "$HOME_DIR/.zshrc"
         sudo chown "$CURRENT_USER:$CURRENT_USER" "$HOME_DIR/.zshrc"
+        
+        # Dépendances + GCC
+        sudo apt-get install -y build-essential
+        if command -v brew >/dev/null 2>&1; then
+            brew install gcc
+        fi
+        
         echo "✅ Homebrew → /home/linuxbrew/.linuxbrew/bin/brew"
     fi
     echo ""
@@ -156,6 +182,10 @@ fi
 
 # Shell par défaut
 sudo chsh -s /bin/zsh "$CURRENT_USER" 2>/dev/null || true
+
+# Lancement OMZ automatique
+echo "🚀 Lancement Oh My Zsh..."
+sudo -u "$CURRENT_USER" zsh -l
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 🎉 TERMINÉ !
@@ -168,7 +198,8 @@ echo "   • Zsh : zsh --version"
 echo "   • OMZ : ls ~/.oh-my-zsh"
 echo "   • Brew: brew --version"
 echo "   • Atuin: atuin register"
+echo "   • Alias: relbash, zshconfig, maj"
 echo ""
-echo "🚀 Lancez : exec zsh"
+echo "🚀 Déjà lancé dans Oh My Zsh ! (Ctrl+D pour quitter)"
 echo ""
 echo "🔥 ═══════════════════════════════════════════════════════════════════════════════"
