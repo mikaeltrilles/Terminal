@@ -65,7 +65,7 @@ apt_install() {
 }
 
 get_users() {
-    awk -F: '{if ($3 >= 1000 || $3 >= 500 && $1 != "nobody") print $1}' /etc/passwd
+    awk -F: '{if ($3 >= 1000 || ($3 >= 500 && $1 != "nobody")) print $1}' /etc/passwd
 }
 
 copy_to_usershome() {
@@ -93,8 +93,9 @@ zsh_all_users() {
 
 append_to_zshrc() {
     local content="$1"
+    local comment="$2"
     echo "" >> /root/.zshrc
-    echo "# $2" >> /root/.zshrc
+    echo "# $comment" >> /root/.zshrc
     echo "$content" >> /root/.zshrc
 }
 
@@ -112,7 +113,7 @@ done
 if [ "$MOTD" = 1 ]; then
     echo ""
     echo "-- MOTD --"
-    apt-get install -y neofetch figlet lolcat -y $VERBOSE
+    apt-get install -y neofetch figlet lolcat $VERBOSE
     
     mkdir -p /root/.config/neofetch /etc/neofetch
     curl -fsSL "https://raw.githubusercontent.com/PAPAMICA/terminal/main/neofetch.conf" -o /root/.config/neofetch/config.conf $VERBOSE
@@ -177,9 +178,9 @@ sh -c \"\$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/t
 sed -i 's/ZSH_THEME=\"robbyrussell\"/ZSH_THEME=\"agnoster\"/g' /root/.zshrc" \
 ""
 
-# Atuin (historique intelligent)
+# Atuin (CORRIGÉ avec le script officiel)
 app_install "atuin" \
-"curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh | sh -s -- -y && atuin import auto" \
+"bash <(curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh)" \
 'eval "$(atuin init zsh)"'
 
 # Bat (cat amélioré)
@@ -236,15 +237,16 @@ app_install "rg" \
 "apt-get install -y ripgrep" \
 "alias grep=rg"
 
-# Z (navigateur de dossiers intelligent)
-app_install "z" \
-"apt-get install -y zoxide && zoxide init zsh --cmd z > /tmp/z_init.sh && cat /tmp/z_init.sh >> /root/.zshrc" \
-""
+# Z (navigateur de dossiers intelligent) - zoxide
+app_install "zoxide" \
+"apt-get install -y zoxide" \
+'eval "$(zoxide init zsh)"'
 
 # Plugins Zsh
 app_install "zsh-autosuggestions" \
 "git clone https://github.com/zsh-users/zsh-autosuggestions /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions" \
-'source /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh'
+'source /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#808080"'
 
 app_install "zsh-syntax-highlighting" \
 "git clone https://github.com/zsh-users/zsh-syntax-highlighting.git /root/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" \
@@ -267,4 +269,5 @@ localedef -i en_US -c -f UTF-8 en_US.UTF-8 2>/dev/null || true
 echo ""
 echo "🎉 Installation terminée ! Redémarrez votre session pour charger Zsh."
 echo "   • Lancez 'zsh' pour tester immédiatement"
-echo "   • Vérifiez ~/.zshrc pour les personnalisations"[web:1][web:2][web:7][web:9][web:10][web:21][web:27][web:31]
+echo "   • Vérifiez ~/.zshrc pour les personnalisations"
+echo "   • Atuin: exécutez 'atuin register' pour la synchronisation"
