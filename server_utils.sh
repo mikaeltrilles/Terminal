@@ -51,30 +51,38 @@ if ! command -v apt-get >/dev/null 2>&1; then
     exit 1
 fi
 
-# Mise à jour système ✅ CORRIGÉ
+# Mise à jour système ✅ VERBOSE AJOUTÉ
 echo ""
 echo "-- Mise à jour système --"
 if [ "$IS_VERBOSE" = 1 ]; then
+    echo "   (1/2) 🤖 apt-get update..."
     apt-get update $VERBOSE
+    echo "   (2/2) 🤖 apt-get upgrade..."
     apt-get upgrade -y $VERBOSE
 else
+    echo "   (1/2) 🤖 apt-get update... ✅"
     apt-get update >/dev/null 2>&1
+    echo "   (2/2) 🤖 apt-get upgrade... ✅"
     apt-get upgrade -y >/dev/null 2>&1
 fi
+echo " ✅ Système mis à jour !"
 
 # Fonctions utilitaires ✅ CORRIGÉES
 apt_install() {
     local pkg="$1"
     local count="$2"
+    local total="$3"
     if [ "$IS_VERBOSE" = 1 ]; then
+        echo "   ($count/$total) 🤖 Installation $pkg..."
         apt-get install -y $pkg $VERBOSE
     else
+        echo "   ($count/$total) 🤖 $pkg..."
         apt-get install -y $pkg >/dev/null 2>&1
     fi
     if [ $? -eq 0 ]; then
-        echo "   ($count) ✅ $pkg"
+        echo "   ($count/$total) ✅ $pkg"
     else
-        echo "   ($count) ❌ $pkg"
+        echo "   ($count/$total) ❌ $pkg"
     fi
 }
 
@@ -113,15 +121,17 @@ append_to_zshrc() {
     echo "$content" >> /root/.zshrc
 }
 
-# Prérequis
+# Prérequis ✅ COMPTEUR 1/9 AJOUTÉ
 echo ""
-echo "-- Prérequis --"
+echo "-- Prérequis (9 paquets) --"
 PACKAGES="curl wget gzip lsb-release locales-all python3-pip make bzip2 git"
 i=0
+total=9
 for pkg in $PACKAGES; do
     i=$((i+1))
-    apt_install "$pkg" "$i"
+    apt_install "$pkg" "$i" "$total"
 done
+echo " ✅ Tous les prérequis installés !"
 
 # MOTD optionnel
 if [ "$MOTD" = 1 ]; then
@@ -157,7 +167,7 @@ EOF
     echo " ✅ MOTD configuré !"
 fi
 
-# Fonction d'installation d'applications ✅ CORRIGÉE
+# Fonction d'installation d'applications
 app_install() {
     local app="$1"
     local install_cmd="$2"
@@ -230,23 +240,6 @@ app_install "btop" \
 "apt-get install -y btop" \
 "alias top=btop
 alias htop=btop"
-
-# Cheat.sh ✅ CORRIGÉ (ARM64 + wget direct)
-echo ""
-echo "-- cheat --"
-echo " 🤖 Installation de cheat ..."
-if curl -s https://api.github.com/repos/cheat/cheat/releases/latest | \
-grep 'browser_download_url.*cheat-linux-aarch64.gz' | \
-head -1 | cut -d : -f 2,4 | tr -d '"' | xargs wget -qO- | \
-gzip -d | chmod +x > /usr/local/bin/cheat && \
-mkdir -p /root/.config/cheat/cheatsheets/{community,personal} && \
-git clone https://github.com/cheat/cheatsheets.git /root/.config/cheat/cheatsheets/community; then
-    append_to_zshrc 'alias ?="cheat"
-alias ??="cheat --directory ~/.config/cheat/cheatsheets/personal"' "cheat"
-    echo " ✅ cheat installé avec succès !"
-else
-    echo " ❌ Échec installation cheat (essayez manuellement)"
-fi
 
 # Direnv
 app_install "direnv" \
