@@ -7,8 +7,8 @@
 # Active Verbose & Help
 VERBOSE=""
 MOTD=0
-ALLUSERS=0
-IS_VERBOSE=0
+ALLUSERS=1
+IS_VERBOSE=1
 
 clear
 echo "🔥 ═══════════════════════════════════════════════════════════════════════════════"
@@ -111,7 +111,7 @@ apt_install() {
 echo "🛠️  ═══════════════════════════════════════════════════════════════════════════════"
 echo "🛠️                           PRÉREQUIS (9 paquets)"
 echo "🛠️  ═══════════════════════════════════════════════════════════════════════════════"
-PACKAGES="curl wget gzip lsb-release locales-all python3-pip make bzip2 git"
+PACKAGES="curl wget file git procps build-essential"
 i=0; total=9
 for pkg in $PACKAGES; do
     i=$((i+1))
@@ -120,30 +120,41 @@ done
 echo " ✅ Tous les prérequis installés !"
 echo ""
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# 🍺 HOMEBREW
-# ═══════════════════════════════════════════════════════════════════════════════
-echo "🍺 ═══════════════════════════════════════════════════════════════════════════════"
-echo "🍺                                HOMEBREW"
-echo "🍺 ═══════════════════════════════════════════════════════════════════════════════"
-if command -v brew >/dev/null 2>&1; then
-    echo " ✅ Homebrew déjà installé"
-else
-    echo " 🤖 Installation Homebrew..."
-    if [ "$IS_VERBOSE" = 1 ]; then
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" $VERBOSE
-    else
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" >/dev/null 2>&1
-    fi
-    echo " ✅ Homebrew installé !"
-fi
-echo ""
+get_users() {
+    awk -F: '{if ($3 >= 1000 || ($3 >= 500 && $1 != "nobody")) print $1}' /etc/passwd
+}
+
+copy_to_usershome() {
+    local src="$1" dest="$2" users=$(get_users)
+    for user in $users; do
+        local dir="/home/$user"
+        [ -d "$dir" ] || continue
+        mkdir -p "$dir/$dest"
+        echo "  📂 Copie → $user/$dest"
+        cp -r "$src" "$dir/$dest/" 2>/dev/null || true
+        chown -R "$user":"$(id -gn "$user")" "$dir/$dest" 2>/dev/null || true
+    done
+}
+
+zsh_all_users() {
+    local users=$(get_users)
+    for user in $users; do
+        chsh -s /bin/zsh "$user" 2>/dev/null || true
+    done
+}
+
+append_to_zshrc() {
+    local content="$1" comment="$2"
+    echo "" >> /root/.zshrc
+    echo "# $comment" >> /root/.zshrc
+    echo "$content" >> /root/.zshrc
+}
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 🐚 ZSH + OHMYZSH
+# 🐚 ZSH + OH MY ZSH ✅ CORRIGÉ
 # ═══════════════════════════════════════════════════════════════════════════════
 echo "🐚 ═══════════════════════════════════════════════════════════════════════════════"
-echo "🐚                        ZSH + OH MY ZSH + PLUGINS"
+echo "🐚                        ZSH + OH MY ZSH (UNATTENDED)"
 echo "🐚 ═══════════════════════════════════════════════════════════════════════════════"
 
 app_install() {
@@ -175,52 +186,42 @@ app_install() {
     fi
 }
 
-append_to_zshrc() {
-    local content="$1" comment="$2"
-    echo "" >> /root/.zshrc
-    echo "# $comment" >> /root/.zshrc
-    echo "$content" >> /root/.zshrc
-}
+# Zsh de base
+app_install "zsh" "apt-get install -y zsh" ""
 
-get_users() {
-    awk -F: '{if ($3 >= 1000 || ($3 >= 500 && $1 != "nobody")) print $1}' /etc/passwd
-}
+# Oh My Zsh ✅ CORRIGÉ --unattended officiel
+echo ""
+echo "  🟢 oh-my-zsh"
+echo "  ──────────────────────────────"
+echo "  🤖 Installation Oh My Zsh..."
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME="agnoster"/g' /root/.zshrc
+echo "  ✅ Oh My Zsh + thème agnoster !"
+echo ""
 
-copy_to_usershome() {
-    local src="$1" dest="$2" users=$(get_users)
-    for user in $users; do
-        local dir="/home/$user"
-        [ -d "$dir" ] || continue
-        mkdir -p "$dir/$dest"
-        echo "  📂 Copie → $user/$dest"
-        cp -r "$src" "$dir/$dest/" 2>/dev/null || true
-        chown -R "$user":"$(id -gn "$user")" "$dir/$dest" 2>/dev/null || true
-    done
-}
-
-zsh_all_users() {
-    local users=$(get_users)
-    for user in $users; do
-        chsh -s /bin/zsh "$user" 2>/dev/null || true
-    done
-}
-
-# Git
-app_install "git" \
-"apt-get install -y git" \
-"gic() { git add . && git commit -m \"\$@\" && git push; }
-gbc() { git pull && git checkout -b \"\$@\" && git push --set-upstream origin \"\$@\"; }
-alias gaa='git add *'
-alias ga='git add'
-alias gps='git push'
-alias gpl='git pull'"
-
-# Zsh + Oh My Zsh (install complet)
-app_install "zsh" \
-"apt-get install -y zsh && \
-sh -c \"\$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\" && \
-sed -i 's/ZSH_THEME=\"robbyrussell\"/ZSH_THEME=\"agnoster\"/g' /root/.zshrc" \
-""
+# ═══════════════════════════════════════════════════════════════════════════════
+# 🍺 HOMEBREW ✅ CORRIGÉ Linux/Root
+# ═══════════════════════════════════════════════════════════════════════════════
+echo "🍺 ═══════════════════════════════════════════════════════════════════════════════"
+echo "🍺                                HOMEBREW (Linux)"
+echo "🍺 ═══════════════════════════════════════════════════════════════════════════════"
+if command -v brew >/dev/null 2>&1; then
+    echo " ✅ Homebrew déjà installé"
+else
+    echo " 🤖 Installation Homebrew pour Linux..."
+    # Homebrew Linux se fait en user NON-root dans /home/linuxbrew/.linuxbrew
+    if [ "$IS_VERBOSE" = 1 ]; then
+        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    else
+        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" >/dev/null 2>&1
+    fi
+    
+    # Ajout au PATH pour root
+    echo 'export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"' >> /root/.zshrc
+    echo 'export PATH="/home/linuxbrew/.linuxbrew/sbin:$PATH"' >> /root/.zshrc
+    echo " ✅ Homebrew installé → /home/linuxbrew/.linuxbrew/bin/brew"
+fi
+echo ""
 
 # Atuin
 echo ""
@@ -309,9 +310,11 @@ echo "🎉 ═══════════════════════
 echo "🎉                        INSTALLATION TERMINÉE !"
 echo "🎉 ═══════════════════════════════════════════════════════════════════════════════"
 echo ""
-echo "✅ Homebrew installé → brew --version"
-echo "✅ Zsh + Oh My Zsh → zsh"
-echo "✅ Atuin → atuin register (sync)"
+echo "✅ Vérifiez les installations :"
+echo "   • zsh → zsh"
+echo "   • oh-my-zsh → ls ~/.oh-my-zsh"
+echo "   • brew → /home/linuxbrew/.linuxbrew/bin/brew --version"
+echo "   • atuin → atuin register"
 echo ""
-echo "🔥 Relancez votre session ou tapez : exec zsh"
+echo "🔥 Relancez : exec zsh"
 echo "🔥 ═══════════════════════════════════════════════════════════════════════════════"
