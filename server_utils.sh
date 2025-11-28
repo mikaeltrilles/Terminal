@@ -127,9 +127,9 @@ if [ "$OMZ" = 1 ]; then
     sudo cp -rf /root/.oh-my-zsh "$HOME_DIR/" 2>/dev/null || true
     sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$HOME_DIR/.oh-my-zsh" 2>/dev/null || true
     
-    # Thème agnoster + plugins
+    # Thème JONATHAN par défaut ✅
     sudo -u "$CURRENT_USER" bash -c "mkdir -p '$HOME_DIR/.oh-my-zsh/custom/plugins'"
-    sed -i 's/robbyrussell/agnoster/g' "$HOME_DIR/.zshrc" 2>/dev/null || true
+    sed -i 's/robbyrussell/jonathan/g' "$HOME_DIR/.zshrc" 2>/dev/null || true
     
     # Plugins
     sudo -u "$CURRENT_USER" git clone https://github.com/zsh-users/zsh-autosuggestions "$HOME_DIR/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
@@ -137,7 +137,7 @@ if [ "$OMZ" = 1 ]; then
     
     # Ajout plugins au .zshrc
     {
-        echo 'plugins=(git zsh-autosuggestions zsh-syntax-highlighting)'
+        echo 'plugins=(git zsh-autosuggestions zsh-syntax-highlighting sudo)'
         echo 'source $HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh'
         echo 'export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#808080"'
         echo 'source $HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh'
@@ -146,12 +146,13 @@ if [ "$OMZ" = 1 ]; then
         echo 'eval "$(zoxide init zsh)"'
         echo 'eval "$(direnv hook zsh)"'
         echo 'alias relbash="source ~/.zshrc"'
-        echo 'alias zshconfig="nano ~/.zshrc"'
+        echo 'alias zshconfig="sudo nano ~/.zshrc"'
+        echo 'alias cls="clear"'
         echo 'maj() { echo "🍓  Mise à jour complète Raspberry Pi OS 🍀"; echo "──────────────────────────────────────────"; echo -e "\n📦  Mise à jour des dépôts APT..."; sudo apt-get update -y; echo -e "\n⚙️  Installation des mises à jour disponibles..."; sudo apt-get upgrade -y; echo -e "\n🚀  Mise à niveau de la distribution..."; sudo apt-get dist-upgrade -y; echo -e "\n🔧  Mise à jour du firmware Raspberry Pi..."; sudo rpi-update; echo -e "\n🧹  Nettoyage des paquets obsolètes..."; sudo apt-get autoremove -y; sudo apt-get autoclean -y; sudo apt-get clean; echo -e "\n☕️  Mise à jour Homebrew..."; brew update; echo -e "\n📦  Mise à niveau des paquets Homebrew..."; brew upgrade; echo -e "\n🧹  Nettoyage Homebrew..."; brew autoremove; echo -e "\n🏁  Mise à jour terminée avec succès ! 🎉"; echo "──────────────────────────────────────────"; }'
     } >> "$HOME_DIR/.zshrc"
     
     sudo chown "$CURRENT_USER:$CURRENT_USER" "$HOME_DIR/.zshrc"
-    echo "✅ Oh My Zsh + plugins + aliases pour $CURRENT_USER"
+    echo "✅ Oh My Zsh + thème JONATHAN + plugins + aliases pour $CURRENT_USER"
     echo ""
 fi
 
@@ -199,6 +200,6 @@ echo "   • Brew: brew --version"
 echo "   • Atuin: atuin register"
 echo "   • Alias: relbash, zshconfig, maj"
 echo ""
-echo "🚀 Déjà lancé dans Oh My Zsh ! (Ctrl+D pour quitter)"
+echo "🚀 Déjà lancé dans Oh My Zsh avec thème JONATHAN ! (Ctrl+D pour quitter)"
 echo ""
 echo "🔥 ═══════════════════════════════════════════════════════════════════════════════"
