@@ -1,320 +1,174 @@
 #!/bin/bash
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 🚀 TERMINAL SETUP SCRIPT - Installation complète d'outils Shell modernes
+# 🚀 TERMINAL SETUP SCRIPT - Installation pour utilisateur actif
 # ═══════════════════════════════════════════════════════════════════════════════
-
-# Active Verbose & Help
-VERBOSE=""
-MOTD=0
-ALLUSERS=1
-IS_VERBOSE=1
 
 clear
 echo "🔥 ═══════════════════════════════════════════════════════════════════════════════"
-echo "           🚀 TERMINAL SETUP - Installation complète"
+echo "           🚀 TERMINAL SETUP - Menu d'installation"
 echo "🔥 ═══════════════════════════════════════════════════════════════════════════════"
-
-for argument in "$@"; do
-    case "$argument" in
-        --verbose)
-            echo " ✅ Mode Verbose activé"
-            IS_VERBOSE=1
-            VERBOSE="2>&1"
-            ;;
-        --help)
-            cat << 'EOF'
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ Ce script installe un terminal moderne complet !                              │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ Options :                                                                     │
-│   --verbose     📢 Affiche les logs détaillés                                 │
-│   --motd        🎨 Configure le MOTD personnalisé                            │
-│   --all-users   👥 Applique à tous les utilisateurs                          │
-└──────────────────────────────────────────────────────────────────────────────┘
-EOF
-            exit 0
-            ;;
-        --motd)
-            echo " ✅ MOTD activé"
-            MOTD=1
-            ;;
-        --all-users)
-            echo " ✅ Mode multi-utilisateurs"
-            ALLUSERS=1
-            ;;
-        *)
-            if [ -n "$argument" ]; then
-                echo "❌ Argument inconnu: $argument"
-                exit 1
-            fi
-            ;;
-    esac
-done
-
-# Vérifications préalables
 echo ""
-echo "🔍 VÉRIFICATIONS PRÉALABLES"
-if [ "$EUID" -ne 0 ]; then
-    echo " ❌ Erreur: Exécutez en tant que root (sudo)"
-    exit 1
-fi
-echo " ✅ Root OK"
 
+# Détection utilisateur actif
+CURRENT_USER=$(logname 2>/dev/null || whoami)
+HOME_DIR="/home/$CURRENT_USER"
+if [ "$CURRENT_USER" = "root" ]; then
+    HOME_DIR="/root"
+fi
+
+echo "👤 Utilisateur détecté : $CURRENT_USER"
+echo "🏠 Home : $HOME_DIR"
+echo ""
+
+# Menu interactif
+echo "📋 Choisissez une option :"
+echo "   1) 🛠️  Installation de base (Zsh + outils essentiels)"
+echo "   2) 🐚 Installation Oh My Zsh (sh -c .../install.sh)"
+echo "   3) 🍺 Installation Homebrew (Linux non-root)"
+echo "   4) 🔥 Installation complète (1+2+3)"
+echo ""
+read -p "Votre choix (1-4) [1] : " CHOICE
+CHOICE=${CHOICE:-1}
+
+case $CHOICE in
+    1) BASE=1 ;;
+    2) OMZ=1 ;;
+    3) BREW=1 ;;
+    4) BASE=1; OMZ=1; BREW=1 ;;
+    *) echo "❌ Option invalide. Quit."; exit 1 ;;
+esac
+
+echo ""
+echo "🚀 Début installation... ($CHOICE sélectionné)"
+echo ""
+
+# Vérifications
 if ! command -v apt-get >/dev/null 2>&1; then
-    echo " ❌ Erreur: Compatible Debian/Ubuntu uniquement"
+    echo " ❌ Compatible Debian/Ubuntu uniquement"
     exit 1
 fi
-echo " ✅ Debian/Ubuntu détecté"
-echo ""
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# 📦 MISE À JOUR SYSTÈME
-# ═══════════════════════════════════════════════════════════════════════════════
-echo "📦 ═══════════════════════════════════════════════════════════════════════════════"
-echo "📦                           MISE À JOUR SYSTÈME"
-echo "📦 ═══════════════════════════════════════════════════════════════════════════════"
-if [ "$IS_VERBOSE" = 1 ]; then
-    echo "   (1/2) 🔄 apt-get update..."
-    apt-get update $VERBOSE
-    echo "   (2/2) 🔄 apt-get upgrade..."
-    apt-get upgrade -y $VERBOSE
-else
-    echo "   (1/2) 🔄 Mise à jour des sources... ✅"
-    apt-get update >/dev/null 2>&1
-    echo "   (2/2) 🔄 Mise à niveau des paquets... ✅"
-    apt-get upgrade -y >/dev/null 2>&1
+if ! command -v sudo >/dev/null 2>&1; then
+    echo " ❌ Installez sudo d'abord"
+    exit 1
 fi
-echo " ✅ Système à jour !"
-echo ""
 
-# Fonctions utilitaires
+# Fonctions
+section() {
+    echo ""
+    echo "📦 ═══════════════════════════════════════════════════════════════════════════════"
+    echo "📦                           $1"
+    echo "📦 ═══════════════════════════════════════════════════════════════════════════════"
+}
+
 apt_install() {
-    local pkg="$1" count="$2" total="$3"
-    if [ "$IS_VERBOSE" = 1 ]; then
-        echo "   ($count/$total) 📥 Installation $pkg..."
-        apt-get install -y $pkg $VERBOSE
-    else
-        echo "   ($count/$total) 📦 $pkg..."
-        apt-get install -y $pkg >/dev/null 2>&1
-    fi
-    if [ $? -eq 0 ]; then
-        echo "   ($count/$total) ✅ $pkg"
-    else
-        echo "   ($count/$total) ❌ $pkg"
-    fi
+    sudo apt-get update >/dev/null 2>&1
+    sudo apt-get install -y "$1" >/dev/null 2>&1
+    echo "✅ $1 installé"
+}
+
+append_to_rc() {
+    local file="$HOME_DIR/.$(basename "$1")"
+    echo "# $(date): $2" >> "$file"
+    echo "$3" >> "$file"
+    echo "✅ $file mis à jour"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 🛠️ PRÉREQUIS (9 paquets)
+# 📦 PRÉREQUIS
 # ═══════════════════════════════════════════════════════════════════════════════
-echo "🛠️  ═══════════════════════════════════════════════════════════════════════════════"
-echo "🛠️                           PRÉREQUIS (9 paquets)"
-echo "🛠️  ═══════════════════════════════════════════════════════════════════════════════"
-PACKAGES="curl wget file git procps build-essential"
-i=0; total=9
-for pkg in $PACKAGES; do
-    i=$((i+1))
-    apt_install "$pkg" "$i" "$total"
-done
-echo " ✅ Tous les prérequis installés !"
+section "PRÉREQUIS"
+apt_install "curl wget git zsh build-essential procps file locales-all"
 echo ""
 
-get_users() {
-    awk -F: '{if ($3 >= 1000 || ($3 >= 500 && $1 != "nobody")) print $1}' /etc/passwd
-}
-
-copy_to_usershome() {
-    local src="$1" dest="$2" users=$(get_users)
-    for user in $users; do
-        local dir="/home/$user"
-        [ -d "$dir" ] || continue
-        mkdir -p "$dir/$dest"
-        echo "  📂 Copie → $user/$dest"
-        cp -r "$src" "$dir/$dest/" 2>/dev/null || true
-        chown -R "$user":"$(id -gn "$user")" "$dir/$dest" 2>/dev/null || true
-    done
-}
-
-zsh_all_users() {
-    local users=$(get_users)
-    for user in $users; do
-        chsh -s /bin/zsh "$user" 2>/dev/null || true
-    done
-}
-
-append_to_zshrc() {
-    local content="$1" comment="$2"
-    echo "" >> /root/.zshrc
-    echo "# $comment" >> /root/.zshrc
-    echo "$content" >> /root/.zshrc
-}
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 🐚 ZSH + OH MY ZSH ✅ CORRIGÉ
-# ═══════════════════════════════════════════════════════════════════════════════
-echo "🐚 ═══════════════════════════════════════════════════════════════════════════════"
-echo "🐚                        ZSH + OH MY ZSH (UNATTENDED)"
-echo "🐚 ═══════════════════════════════════════════════════════════════════════════════"
-
-app_install() {
-    local app="$1" install_cmd="$2" zshrc_content="$3"
-    echo ""
-    echo "  🟢 $app"
-    echo "  ──────────────────────────────"
+# 1. Installation de base
+if [ "$BASE" = 1 ]; then
+    section "INSTALLATION DE BASE"
+    apt_install "zsh bat btop eza ripgrep zoxide duf direnv neofetch"
     
-    if command -v "$app" >/dev/null 2>&1; then
-        echo "  ✅ Déjà installé"
-        return 0
-    fi
+    # Atuin
+    echo "🤖 Atuin..."
+    bash <(curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh)
+    append_to_rc ".zshrc" "atuin" 'eval "$(atuin init zsh)"'
     
-    echo "  🤖 Installation..."
-    if [ "$IS_VERBOSE" = 1 ]; then
-        if eval "$install_cmd $VERBOSE"; then
-            [ -n "$zshrc_content" ] && append_to_zshrc "$zshrc_content" "$app" && echo "  ✅ .zshrc mis à jour"
-            echo "  ✅ Succès !"
-        else
-            echo "  ❌ Échec"
-        fi
-    else
-        if eval "$install_cmd >/dev/null 2>&1"; then
-            [ -n "$zshrc_content" ] && append_to_zshrc "$zshrc_content" "$app" && echo "  ✅ .zshrc mis à jour"
-            echo "  ✅ Succès !"
-        else
-            echo "  ❌ Échec"
-        fi
-    fi
-}
-
-# Zsh de base
-app_install "zsh" "apt-get install -y zsh" ""
-
-# Oh My Zsh ✅ CORRIGÉ --unattended officiel
-echo ""
-echo "  🟢 oh-my-zsh"
-echo "  ──────────────────────────────"
-echo "  🤖 Installation Oh My Zsh..."
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME="agnoster"/g' /root/.zshrc
-echo "  ✅ Oh My Zsh + thème agnoster !"
-echo ""
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 🍺 HOMEBREW ✅ CORRIGÉ Linux/Root
-# ═══════════════════════════════════════════════════════════════════════════════
-echo "🍺 ═══════════════════════════════════════════════════════════════════════════════"
-echo "🍺                                HOMEBREW (Linux)"
-echo "🍺 ═══════════════════════════════════════════════════════════════════════════════"
-if command -v brew >/dev/null 2>&1; then
-    echo " ✅ Homebrew déjà installé"
-else
-    echo " 🤖 Installation Homebrew pour Linux..."
-    # Homebrew Linux se fait en user NON-root dans /home/linuxbrew/.linuxbrew
-    if [ "$IS_VERBOSE" = 1 ]; then
-        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    else
-        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" >/dev/null 2>&1
-    fi
-    
-    # Ajout au PATH pour root
-    echo 'export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"' >> /root/.zshrc
-    echo 'export PATH="/home/linuxbrew/.linuxbrew/sbin:$PATH"' >> /root/.zshrc
-    echo " ✅ Homebrew installé → /home/linuxbrew/.linuxbrew/bin/brew"
-fi
-echo ""
-
-# Atuin
-echo ""
-echo "  🟢 atuin"
-echo "  ──────────────────────────────"
-echo "  🤖 Installation..."
-bash <(curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh)
-append_to_zshrc 'eval "$(atuin init zsh)"' "atuin"
-echo "  ✅ Succès !"
-echo ""
-
-# Autres outils APT
-for app in bat btop direnv duf eza ripgrep zoxide; do
-    app_install "$app" "apt-get install -y $app" \
-    "$( [ "$app" = "bat" ] && echo "alias cat='bat --style=header --paging=never'; alias bat='bat --style=header --paging=never'" ||
-       [ "$app" = "rg" ] && echo "alias grep=rg" ||
-       [ "$app" = "zoxide" ] && echo 'eval "$(zoxide init zsh)"' ||
-       [ "$app" = "direnv" ] && echo 'eval "$(direnv hook zsh)"' ||
-       echo "" )"
-done
-
-# Micro
-app_install "micro" "cd /usr/local/bin && curl https://getmic.ro | bash" ""
-
-# Plugins Zsh
-app_install "zsh-autosuggestions" \
-"git clone https://github.com/zsh-users/zsh-autosuggestions /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions" \
-'source /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
-export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#808080"'
-
-app_install "zsh-syntax-highlighting" \
-"git clone https://github.com/zsh-users/zsh-syntax-highlighting.git /root/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" \
-'source /root/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh'
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 🎨 MOTD OPTIONNEL
-# ═══════════════════════════════════════════════════════════════════════════════
-if [ "$MOTD" = 1 ]; then
-    echo ""
-    echo "🎨 ═══════════════════════════════════════════════════════════════════════════════"
-    echo "🎨                                MOTD PERSONNALISÉ"
-    echo "🎨 ═══════════════════════════════════════════════════════════════════════════════"
-    apt-get install -y neofetch figlet lolcat >/dev/null 2>&1
-    
-    mkdir -p /root/.config/neofetch /etc/neofetch
-    curl -fsSL "https://raw.githubusercontent.com/PAPAMICA/terminal/main/neofetch.conf" -o /root/.config/neofetch/config.conf >/dev/null 2>&1
-    cp /root/.config/neofetch/config.conf /etc/neofetch/config.conf
-    
-    [ "$ALLUSERS" = 1 ] && copy_to_usershome "/root/.config/neofetch" ".config"
-    
-    rm -rf /etc/motd /etc/update-motd.d/*
-    cat > /etc/update-motd.d/00-motd << 'EOF'
-#!/bin/sh
-hostname=$(uname -n | cut -d '.' -f 1)
-figlet "$hostname" | lolcat
-neofetch --config /etc/neofetch/config.conf
-EOF
-    chmod +x /etc/update-motd.d/00-motd
-    echo " ✅ MOTD configuré !"
+    # Micro
+    echo "🤖 Micro..."
+    cd /usr/local/bin && curl https://getmic.ro | bash
+    echo "✅ Micro installé"
     echo ""
 fi
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# 👥 MULTI-UTILISATEURS
-# ═══════════════════════════════════════════════════════════════════════════════
-if [ "$ALLUSERS" = 1 ]; then
-    echo "👥 ═══════════════════════════════════════════════════════════════════════════════"
-    echo "👥                        APPLICATION AUX AUTRES UTILISATEURS"
-    echo "👥 ═══════════════════════════════════════════════════════════════════════════════"
-    copy_to_usershome "/root/.zshrc" ""
-    copy_to_usershome "/root/.oh-my-zsh" ".oh-my-zsh"
-    copy_to_usershome "/root/.config" ".config"
-    zsh_all_users
-    echo " ✅ Appliqué à tous les utilisateurs !"
+# 2. Oh My Zsh
+if [ "$OMZ" = 1 ]; then
+    section "OH MY ZSH"
+    echo "🤖 Oh My Zsh (officiel)..."
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    
+    # Copie vers utilisateur actif
+    sudo cp -rf /root/.oh-my-zsh "$HOME_DIR/"
+    sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$HOME_DIR/.oh-my-zsh"
+    
+    # Thème agnoster + plugins
+    sed -i 's/robbyrussell/agnoster/g' "$HOME_DIR/.zshrc"
+    
+    # Plugins
+    sudo -u "$CURRENT_USER" git clone https://github.com/zsh-users/zsh-autosuggestions "$HOME_DIR/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+    sudo -u "$CURRENT_USER" git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$HOME_DIR/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
+    
+    # Ajout plugins au .zshrc
+    {
+        echo 'plugins=(git zsh-autosuggestions zsh-syntax-highlighting)'
+        echo 'source $HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh'
+        echo 'export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#808080"'
+        echo 'source $HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh'
+        echo 'alias cat="bat --style=header --paging=never"'
+        echo 'alias grep=rg'
+        echo 'eval "$(zoxide init zsh)"'
+        echo 'eval "$(direnv hook zsh)"'
+    } >> "$HOME_DIR/.zshrc"
+    
+    sudo chown "$CURRENT_USER:$CURRENT_USER" "$HOME_DIR/.zshrc"
+    echo "✅ Oh My Zsh + plugins pour $CURRENT_USER"
     echo ""
 fi
 
-# Finalisation
-chsh -s /bin/zsh root 2>/dev/null || true
-localedef -i en_US -c -f UTF-8 en_US.UTF-8 2>/dev/null || true
+# 3. Homebrew
+if [ "$BREW" = 1 ]; then
+    section "HOMEBREW (Linux)"
+    if command -v brew >/dev/null 2>&1; then
+        echo "✅ Homebrew déjà installé"
+    else
+        echo "🤖 Homebrew pour $CURRENT_USER..."
+        NONINTERACTIVE=1 sudo -u "$CURRENT_USER" /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        
+        # Ajout au PATH
+        {
+            echo 'export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"'
+            echo 'export PATH="/home/linuxbrew/.linuxbrew/sbin:$PATH"'
+        } >> "$HOME_DIR/.zshrc"
+        
+        sudo chown "$CURRENT_USER:$CURRENT_USER" "$HOME_DIR/.zshrc"
+        echo "✅ Homebrew → /home/linuxbrew/.linuxbrew/bin/brew"
+    fi
+    echo ""
+fi
+
+# Shell par défaut
+sudo chsh -s /bin/zsh "$CURRENT_USER" 2>/dev/null || true
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 🎉 TERMINÉ !
 # ═══════════════════════════════════════════════════════════════════════════════
-echo "🎉 ═══════════════════════════════════════════════════════════════════════════════"
-echo "🎉                        INSTALLATION TERMINÉE !"
-echo "🎉 ═══════════════════════════════════════════════════════════════════════════════"
+section "INSTALLATION TERMINÉE !"
+echo "✅ Configuration appliquée pour : $CURRENT_USER"
 echo ""
-echo "✅ Vérifiez les installations :"
-echo "   • zsh → zsh"
-echo "   • oh-my-zsh → ls ~/.oh-my-zsh"
-echo "   • brew → /home/linuxbrew/.linuxbrew/bin/brew --version"
-echo "   • atuin → atuin register"
+echo "📋 Vérifications :"
+echo "   • Zsh : zsh --version"
+echo "   • OMZ : ls ~/.oh-my-zsh"
+echo "   • Brew: brew --version"
+echo "   • Atuin: atuin register"
 echo ""
-echo "🔥 Relancez : exec zsh"
+echo "🚀 Lancez : exec zsh"
+echo ""
 echo "🔥 ═══════════════════════════════════════════════════════════════════════════════"
