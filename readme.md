@@ -91,12 +91,19 @@ curl -sSL https://raw.githubusercontent.com/mikaeltrilles/Terminal/refs/heads/ma
 #### ⚙️ Fonctionnalités avancées
 
 ✅ Utilisateur actif détecté automatiquement
+
 ✅ Compteurs progressifs 1/7 → 7/7
+
 ✅ Installation silencieuse (logs propres)
+
 ✅ Shell Zsh par défaut (chsh)
+
 ✅ Lancement auto Oh My Zsh à la fin
+
 ✅ Homebrew Linux non-root (/home/linuxbrew)
+
 ✅ Gestion sudo transparente
+
 
 #### 🛡️ Prérequis
 
