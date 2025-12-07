@@ -197,6 +197,11 @@ echo ""
 read -p "Votre choix (1-6) [1] : " CHOICE
 CHOICE=${CHOICE:-1}
 
+# Initialisation des flags d'option pour éviter 'unbound variable' avec set -u
+BASE=0
+OMZ=0
+BREW=0
+
 case $CHOICE in
     1) BASE=1 ;;
     2) OMZ=1 ;;
