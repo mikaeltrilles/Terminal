@@ -6,7 +6,7 @@ Script d'installation moderne pour Debian/Ubuntu avec menu interactif et thème 
 ## 🎯 Installation en 1 ligne
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/mikaeltrilles/Terminal/refs/heads/main/server_utils.sh | bash
+bash -c "$(curl -s https://raw.githubusercontent.com/mikaeltrilles/Terminal/refs/heads/main/server_utils.sh)"
 ```
 
 ## 📋 Menu interactif (4 options)
@@ -77,14 +77,14 @@ alias maj="maj"  # APT + Brew + Firmware + Nettoyage
 Option 1 - Base uniquement
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/mikaeltrilles/Terminal/refs/heads/main/server_utils.sh | bash
+bash -c "$(curl -s https://raw.githubusercontent.com/mikaeltrilles/Terminal/refs/heads/main/server_utils.sh)"
 # Entrez : 1
 ```
 
 Option 4 - Installation complète
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/mikaeltrilles/Terminal/refs/heads/main/server_utils.sh | bash
+bash -c "$(curl -s https://raw.githubusercontent.com/mikaeltrilles/Terminal/refs/heads/main/server_utils.sh)"
 # Entrez : 4 (défaut)
 ```
 

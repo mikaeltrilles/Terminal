@@ -10,25 +10,11 @@ echo "           🚀 TERMINAL SETUP - Menu d'installation"
 echo "🔥 ═══════════════════════════════════════════════════════════════════════════════"
 echo ""
 
-set -euo pipefail
-IFS=$'\n\t'
-trap 'echo "Erreur sur la ligne $LINENO"; exit 1' ERR
-
-# Détection utilisateur actif (favorise SUDO_USER si présent)
-if [ -n "${SUDO_USER:-}" ]; then
-    CURRENT_USER="$SUDO_USER"
-else
-    CURRENT_USER=$(logname 2>/dev/null || whoami)
-fi
-
-# Détecter le répertoire home réel via getent si possible
-HOME_DIR=$(getent passwd "$CURRENT_USER" | cut -d: -f6 2>/dev/null || true)
-if [ -z "$HOME_DIR" ]; then
-    if [ "$CURRENT_USER" = "root" ]; then
-        HOME_DIR="/root"
-    else
-        HOME_DIR="/home/$CURRENT_USER"
-    fi
+# Détection utilisateur actif
+CURRENT_USER=$(logname 2>/dev/null || whoami)
+HOME_DIR="/home/$CURRENT_USER"
+if [ "$CURRENT_USER" = "root" ]; then
+    HOME_DIR="/root"
 fi
 
 echo "👤 Utilisateur détecté : $CURRENT_USER"
@@ -78,6 +64,7 @@ section() {
 
 apt_install() {
     local pkg="$1" count="$2" total="$3"
+    sudo apt-get update >/dev/null 2>&1
     if sudo apt-get install -y "$pkg" >/dev/null 2>&1; then
         echo "   ($count/$total) ✅ $pkg"
     else
@@ -86,15 +73,10 @@ apt_install() {
 }
 
 append_to_rc() {
-    local base file
-    base=$(basename "$1")
-    if [[ "$base" != .* ]]; then
-        base=".$base"
-    fi
-    file="$HOME_DIR/$base"
+    local file="$HOME_DIR/.$(basename "$1")"
     echo "# $(date): $2" >> "$file"
     echo "$3" >> "$file"
-    sudo chown "$CURRENT_USER:$CURRENT_USER" "$file" 2>/dev/null || true
+    sudo chown "$CURRENT_USER:$CURRENT_USER" "$file"
     echo "✅ $file mis à jour"
 }
 
@@ -104,9 +86,6 @@ append_to_rc() {
 section "PRÉREQUIS (7 paquets)"
 PACKAGES="curl wget git zsh build-essential procps file locales-all"
 i=0; total=7
-
-# Update once before installing packages
-sudo apt-get update -y >/dev/null 2>&1
 for pkg in $PACKAGES; do
     i=$((i+1))
     apt_install "$pkg" "$i" "$total"
@@ -201,13 +180,8 @@ if [ "$BREW" = 1 ]; then
     echo ""
 fi
 
-# Shell par défaut (changer uniquement si zsh présent)
-ZSH_BIN=$(command -v zsh || true)
-if [ -n "$ZSH_BIN" ]; then
-    sudo chsh -s "$ZSH_BIN" "$CURRENT_USER" 2>/dev/null || true
-else
-    echo "⚠️  zsh introuvable, chsh ignoré"
-fi
+# Shell par défaut
+sudo chsh -s /bin/zsh "$CURRENT_USER" 2>/dev/null || true
 
 # Lancement OMZ automatique
 echo "🚀 Lancement Oh My Zsh..."
@@ -220,27 +194,10 @@ section "INSTALLATION TERMINÉE !"
 echo "✅ Configuration appliquée pour : $CURRENT_USER"
 echo ""
 echo "📋 Vérifications :"
-
-# Zsh version (utilise ZSH_BIN si défini)
-if [ -n "${ZSH_BIN:-}" ] && [ -x "$ZSH_BIN" ]; then
-    ZSH_VER=$($ZSH_BIN --version 2>/dev/null | head -n1)
-else
-    ZSH_VER="absent"
-fi
-echo "   • Zsh : $ZSH_VER"
-
-# Oh My Zsh presence for the target user
-if [ -d "$HOME_DIR/.oh-my-zsh" ]; then
-    echo "   • OMZ : présent ($HOME_DIR/.oh-my-zsh)"
-else
-    echo "   • OMZ : absent"
-fi
-
-# Brew version (exécuté en contexte utilisateur si possible)
-BREW_VER=$(sudo -H -u "$CURRENT_USER" bash -lc 'command -v brew >/dev/null 2>&1 && brew --version | head -n1 || echo "absent"')
-echo "   • Brew: $BREW_VER"
-
-echo "   • Atuin: $(sudo -H -u "$CURRENT_USER" bash -lc 'command -v atuin >/dev/null 2>&1 && echo "installé" || echo "absent"')"
+echo "   • Zsh : zsh --version"
+echo "   • OMZ : ls ~/.oh-my-zsh"
+echo "   • Brew: brew --version"
+echo "   • Atuin: atuin register"
 echo "   • Alias: relbash, zshconfig, maj"
 echo ""
 echo "🚀 Déjà lancé dans Oh My Zsh avec thème JONATHAN ! (Ctrl+D pour quitter)"
