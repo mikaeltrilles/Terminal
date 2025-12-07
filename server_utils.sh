@@ -55,7 +55,13 @@ try_version() {
 }
 
 show_versions() {
-    section "VERSIONS INSTALLÉES"
+    # Si la fonction section est disponible, l'utiliser, sinon afficher un header simple
+    if declare -f section >/dev/null 2>&1; then
+        section "VERSIONS INSTALLÉES"
+    else
+        echo ""
+        echo "📦 ===== VERSIONS INSTALLÉES ====="
+    fi
     local cmds=(curl wget git zsh bat btop eza rg zoxide duf direnv atuin micro brew gcc apt-get)
     for c in "${cmds[@]}"; do
         try_version "$c"
