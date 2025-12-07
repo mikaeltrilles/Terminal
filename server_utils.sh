@@ -43,19 +43,36 @@ section() {
     echo "📦 ═══════════════════════════════════════════════════════════════════════════════"
 }
 
-# Extrait une version numérique depuis une chaîne (ex: "less 668 (GNU...)" -> "668")
+# Normalise et extrait une version numérique depuis une chaîne
+# Retourne au format major.minor.patch (ex: "less 668 (GNU...)" -> "668")
+# ou major.minor.patch-suffix si présent (ex: "1.2.3-rc1")
 extract_version() {
     local s="$1"
-    # Cherche le premier pattern 1.2.3 ou 1.2 ou 668 etc.
-    if [[ "$s" =~ ([0-9]+(\.[0-9]+){0,2}([.-][A-Za-z0-9]+)?) ]]; then
-        echo "${BASH_REMATCH[1]}"
+    local ver=""
+    
+    # Cherche le pattern complet: major.minor.patch ou major.minor ou major
+    # suivi optionnellement d'un suffixe (-alpha, -rc1, etc.)
+    if [[ "$s" =~ ([0-9]+\.[0-9]+\.[0-9]+)([-._][A-Za-z0-9]+)? ]]; then
+        # Pattern complet major.minor.patch trouvé
+        ver="${BASH_REMATCH[1]}"
+        [ -n "${BASH_REMATCH[2]:-}" ] && ver="${ver}${BASH_REMATCH[2]}"
+        echo "$ver"
         return 0
     fi
-    # Si rien trouvé, retourne la première suite de chiffres trouvée
+    
+    # Sinon cherche major.minor
+    if [[ "$s" =~ ([0-9]+\.[0-9]+) ]]; then
+        ver="${BASH_REMATCH[1]}"
+        echo "$ver"
+        return 0
+    fi
+    
+    # Sinon juste major (dernier recours pour des cas comme "less 668")
     if [[ "$s" =~ ([0-9]+) ]]; then
         echo "${BASH_REMATCH[1]}"
         return 0
     fi
+    
     # fallback: renvoyer la ligne entière
     echo "$s"
 }
