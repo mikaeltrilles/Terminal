@@ -278,7 +278,7 @@ echo ""
 # 1. Installation de base
 if [ "$BASE" = 1 ]; then
     section "INSTALLATION DE BASE"
-    apt_install "bat" "1" "7"
+    apt_install "less" "1" "7"
     apt_install "btop" "2" "7"
     apt_install "eza" "3" "7"
     apt_install "ripgrep" "4" "7"
@@ -323,7 +323,15 @@ if [ "$OMZ" = 1 ]; then
         echo 'source $HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh'
         echo 'export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#808080"'
         echo 'source $HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh'
-        echo 'alias cat="bat --style=header --paging=never"'
+        echo 'if command -v bat >/dev/null 2>&1; then'
+        echo '  alias cat="bat --style=header --paging=never"'
+        echo 'elif command -v batcat >/dev/null 2>&1; then'
+        echo '  alias cat="batcat --style=header --paging=never"'
+        echo 'elif command -v less >/dev/null 2>&1; then'
+        echo '  alias cat="less -R"'
+        echo 'else'
+        echo '  alias cat="cat"'
+        echo 'fi'
         echo 'alias grep=rg'
         echo 'eval "$(zoxide init zsh)"'
         echo 'eval "$(direnv hook zsh)"'
