@@ -48,7 +48,20 @@ section() {
 # ou major.minor.patch-suffix si présent (ex: "1.2.3-rc1")
 extract_version() {
     local s="$1"
+    local cmd="$2" # optionnel: nom de la commande pour parsing spécifique
     local ver=""
+    
+    # Parsers spécifiques par commande
+    case "$cmd" in
+        eza)
+            # eza retourne "eza X.Y.Z - A modern..."
+            # cherche le pattern major.minor.patch après le nom
+            if [[ "$s" =~ eza[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+                echo "${BASH_REMATCH[1]}"
+                return 0
+            fi
+            ;;
+    esac
     
     # Cherche le pattern complet: major.minor.patch ou major.minor ou major
     # suivi optionnellement d'un suffixe (-alpha, -rc1, etc.)
@@ -171,9 +184,9 @@ try_version() {
         out=$("$path_found" --version 2>&1) || out=$("$path_found" -v 2>&1) || out=$("$path_found" version 2>&1) || out=$("$path_found" -V 2>&1) || out="version inconnue"
     fi
     out=$(echo "$out" | head -n1)
-    # Extraire une version concise
+    # Extraire une version concise (passer le nom de la commande pour parsing spécifique)
     local ver
-    ver=$(extract_version "$out" || true)
+    ver=$(extract_version "$out" "$cmd" || true)
 
     # icônes et couleurs par outil
     local icon="🔹"
@@ -228,8 +241,14 @@ show_versions() {
         try_version "$c"
     done
 
+    # Déterminer la version d'oh-my-zsh
     if [ -d "$HOME_DIR/.oh-my-zsh" ]; then
-        echo -e "   📂 \033[1moh-my-zsh\033[0m : \033[32minstallé dans $HOME_DIR/.oh-my-zsh\033[0m"
+        local omz_ver="installé"
+        if [ -d "$HOME_DIR/.oh-my-zsh/.git" ]; then
+            # Essayer de récupérer le commit short ou le tag
+            omz_ver=$(cd "$HOME_DIR/.oh-my-zsh" 2>/dev/null && (git describe --tags --always 2>/dev/null || git rev-parse --short HEAD 2>/dev/null) || echo "installé")
+        fi
+        echo -e "   📂 \033[1moh-my-zsh\033[0m : \033[32m$omz_ver\033[0m"
     else
         echo -e "   📂 \033[1moh-my-zsh\033[0m : \033[31mnon installé\033[0m"
     fi
