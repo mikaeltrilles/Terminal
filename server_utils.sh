@@ -35,14 +35,42 @@ echo "👤 Utilisateur détecté : $CURRENT_USER"
 echo "🏠 Home : $HOME_DIR"
 echo ""
 
+# Fonctions utilitaires pour affichage des versions
+try_version() {
+    local cmd="$1"
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "   • $cmd : non installé"
+        return
+    fi
+    local out
+    out=$("$cmd" --version 2>&1) || out=$("$cmd" -v 2>&1) || out=$("$cmd" version 2>&1) || out=$("$cmd" -V 2>&1) || out="version inconnue"
+    echo "   • $cmd : $(echo "$out" | head -n1)"
+}
+
+show_versions() {
+    section "VERSIONS INSTALLÉES"
+    local cmds=(curl wget git zsh bat btop eza rg zoxide duf direnv atuin micro brew gcc apt-get)
+    for c in "${cmds[@]}"; do
+        try_version "$c"
+    done
+    if [ -d "$HOME_DIR/.oh-my-zsh" ]; then
+        echo "   • oh-my-zsh : installé dans $HOME_DIR/.oh-my-zsh"
+    else
+        echo "   • oh-my-zsh : non installé"
+    fi
+    echo ""
+}
+
 # Menu interactif
 echo "📋 Choisissez une option :"
 echo "   1) 🛠️  Installation de base (Zsh + outils essentiels)"
 echo "   2) 🐚 Installation Oh My Zsh (sh -c .../install.sh)"
 echo "   3) 🍺 Installation Homebrew (Linux non-root)"
 echo "   4) 🔥 Installation complète (1+2+3)"
+echo "   5) 🔍 Afficher les versions des éléments installés (contrôle)"
+echo "   6) ❌ Quitter sans exécuter le script"
 echo ""
-read -p "Votre choix (1-4) [1] : " CHOICE
+read -p "Votre choix (1-6) [1] : " CHOICE
 CHOICE=${CHOICE:-1}
 
 case $CHOICE in
@@ -50,6 +78,15 @@ case $CHOICE in
     2) OMZ=1 ;;
     3) BREW=1 ;;
     4) BASE=1; OMZ=1; BREW=1 ;;
+    5)
+        # Affiche les versions et quitte sans lancer d'installation
+        show_versions
+        exit 0
+        ;;
+    6)
+        echo "⚠️  Sortie demandée : le script ne sera pas exécuté."
+        exit 0
+        ;;
     *) echo "❌ Option invalide. Quit."; exit 1 ;;
 esac
 
@@ -220,27 +257,10 @@ section "INSTALLATION TERMINÉE !"
 echo "✅ Configuration appliquée pour : $CURRENT_USER"
 echo ""
 echo "📋 Vérifications :"
-
-# Zsh version (utilise ZSH_BIN si défini)
-if [ -n "${ZSH_BIN:-}" ] && [ -x "$ZSH_BIN" ]; then
-    ZSH_VER=$($ZSH_BIN --version 2>/dev/null | head -n1)
-else
-    ZSH_VER="absent"
-fi
-echo "   • Zsh : $ZSH_VER"
-
-# Oh My Zsh presence for the target user
-if [ -d "$HOME_DIR/.oh-my-zsh" ]; then
-    echo "   • OMZ : présent ($HOME_DIR/.oh-my-zsh)"
-else
-    echo "   • OMZ : absent"
-fi
-
-# Brew version (exécuté en contexte utilisateur si possible)
-BREW_VER=$(sudo -H -u "$CURRENT_USER" bash -lc 'command -v brew >/dev/null 2>&1 && brew --version | head -n1 || echo "absent"')
-echo "   • Brew: $BREW_VER"
-
-echo "   • Atuin: $(sudo -H -u "$CURRENT_USER" bash -lc 'command -v atuin >/dev/null 2>&1 && echo "installé" || echo "absent"')"
+echo "   • Zsh : zsh --version"
+echo "   • OMZ : ls ~/.oh-my-zsh"
+echo "   • Brew: brew --version"
+echo "   • Atuin: atuin register"
 echo "   • Alias: relbash, zshconfig, maj"
 echo ""
 echo "🚀 Déjà lancé dans Oh My Zsh avec thème JONATHAN ! (Ctrl+D pour quitter)"
