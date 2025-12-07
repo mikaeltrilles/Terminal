@@ -77,6 +77,44 @@ try_version() {
     if [ -z "$path_found" ]; then
         # icône et couleur pour absence
         local icon_absent="❌"
+        # Tentative : exécuter la commande via un shell de l'utilisateur (bash/zsh)
+        if command -v sudo >/dev/null 2>&1 && [ -n "${CURRENT_USER:-}" ]; then
+            local shells=(bash zsh)
+            for sh in "${shells[@]}"; do
+                if sudo -H -u "$CURRENT_USER" command -v "$sh" >/dev/null 2>&1; then
+                    local s_out
+                    s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "$cmd --version" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "$cmd -v" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "$cmd version" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "$cmd -V" 2>&1) || s_out=""
+                    if [ -n "$(echo "$s_out" | sed -n '1p' | sed -e '/not found/d' -e '/command not found/d')" ]; then
+                        out=$(echo "$s_out" | head -n1)
+                        # Found via user's shell
+                        local icon="🔹"
+                        local col_cmd="$CYAN"
+                        case "$cmd" in
+                            curl) icon="🌊"; col_cmd="\033[36m" ;;
+                            wget) icon="⬇️"; col_cmd="\033[35m" ;;
+                            git) icon="🐙"; col_cmd="\033[34m" ;;
+                            zsh) icon="💠"; col_cmd="\033[35m" ;;
+                            bat) icon="📚"; col_cmd="\033[33m" ;;
+                            btop) icon="📈"; col_cmd="\033[33m" ;;
+                            eza) icon="📁"; col_cmd="\033[36m" ;;
+                            rg|ripgrep) icon="🔎"; col_cmd="\033[36m" ;;
+                            zoxide) icon="🧭"; col_cmd="\033[36m" ;;
+                            duf) icon="📊"; col_cmd="\033[36m" ;;
+                            direnv) icon="🛡️"; col_cmd="\033[36m" ;;
+                            atuin) icon="🛰️"; col_cmd="\033[36m" ;;
+                            micro) icon="✍️"; col_cmd="\033[32m" ;;
+                            brew) icon="🍺"; col_cmd="\033[33m" ;;
+                            gcc) icon="🔧"; col_cmd="\033[33m" ;;
+                            apt-get) icon="📦"; col_cmd="\033[33m" ;;
+                            *) icon="🔹"; col_cmd="$CYAN" ;;
+                        esac
+                        echo -e "   ${icon} ${BOLD}${col_cmd}${cmd}${RESET} : ${GREEN}${out}${RESET}"
+                        return
+                    fi
+                fi
+            done
+        fi
+
         echo -e "   ${icon_absent} ${BOLD}${cmd}${RESET} : ${RED}non installé${RESET}"
         return
     fi
