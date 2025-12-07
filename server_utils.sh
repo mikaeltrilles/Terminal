@@ -83,7 +83,12 @@ try_version() {
             for sh in "${shells[@]}"; do
                 if sudo -H -u "$CURRENT_USER" command -v "$sh" >/dev/null 2>&1; then
                     local s_out
-                    s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "$cmd --version" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "$cmd -v" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "$cmd version" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "$cmd -V" 2>&1) || s_out=""
+                    # Source les fichiers de config usuels de l'utilisateur avant d'exécuter la commande
+                    if [ "$sh" = "zsh" ]; then
+                        s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.zshrc\" 2>/dev/null || true; source \"\$HOME/.zprofile\" 2>/dev/null || true; $cmd --version" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.zshrc\" 2>/dev/null || true; source \"\$HOME/.zprofile\" 2>/dev/null || true; $cmd -v" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.zshrc\" 2>/dev/null || true; source \"\$HOME/.zprofile\" 2>/dev/null || true; $cmd version" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.zshrc\" 2>/dev/null || true; source \"\$HOME/.zprofile\" 2>/dev/null || true; $cmd -V" 2>&1) || s_out=""
+                    else
+                        s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.bashrc\" 2>/dev/null || true; source \"\$HOME/.profile\" 2>/dev/null || true; $cmd --version" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.bashrc\" 2>/dev/null || true; source \"\$HOME/.profile\" 2>/dev/null || true; $cmd -v" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.bashrc\" 2>/dev/null || true; source \"\$HOME/.profile\" 2>/dev/null || true; $cmd version" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.bashrc\" 2>/dev/null || true; source \"\$HOME/.profile\" 2>/dev/null || true; $cmd -V" 2>&1) || s_out=""
+                    fi
                     if [ -n "$(echo "$s_out" | sed -n '1p' | sed -e '/not found/d' -e '/command not found/d')" ]; then
                         out=$(echo "$s_out" | head -n1)
                         # Found via user's shell
