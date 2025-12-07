@@ -45,31 +45,71 @@ section() {
 
 try_version() {
     local cmd="$1"
+    # Couleurs
+    local RESET="\033[0m"
+    local BOLD="\033[1m"
+    local GREEN="\033[32m"
+    local RED="\033[31m"
+    local CYAN="\033[36m"
+
     if ! command -v "$cmd" >/dev/null 2>&1; then
-        echo "   • $cmd : non installé"
+        # icône et couleur pour absence
+        local icon_absent="❌"
+        echo -e "   ${icon_absent} ${BOLD}${cmd}${RESET} : ${RED}non installé${RESET}"
         return
     fi
     local out
     out=$("$cmd" --version 2>&1) || out=$("$cmd" -v 2>&1) || out=$("$cmd" version 2>&1) || out=$("$cmd" -V 2>&1) || out="version inconnue"
-    echo "   • $cmd : $(echo "$out" | head -n1)"
+    out=$(echo "$out" | head -n1)
+
+    # icônes et couleurs par outil
+    local icon="🔹"
+    local col_cmd="$CYAN"
+    case "$cmd" in
+        curl) icon="🌊"; col_cmd="\033[36m" ;;
+        wget) icon="⬇️"; col_cmd="\033[35m" ;;
+        git) icon="🐙"; col_cmd="\033[34m" ;;
+        zsh) icon="💠"; col_cmd="\033[35m" ;;
+        bat) icon="📚"; col_cmd="\033[33m" ;;
+        btop) icon="📈"; col_cmd="\033[33m" ;;
+        eza) icon="📁"; col_cmd="\033[36m" ;;
+        rg|ripgrep) icon="🔎"; col_cmd="\033[36m" ;;
+        zoxide) icon="🧭"; col_cmd="\033[36m" ;;
+        duf) icon="📊"; col_cmd="\033[36m" ;;
+        direnv) icon="🛡️"; col_cmd="\033[36m" ;;
+        atuin) icon="🛰️"; col_cmd="\033[36m" ;;
+        micro) icon="✍️"; col_cmd="\033[32m" ;;
+        brew) icon="🍺"; col_cmd="\033[33m" ;;
+        gcc) icon="🔧"; col_cmd="\033[33m" ;;
+        apt-get) icon="📦"; col_cmd="\033[33m" ;;
+        *) icon="🔹"; col_cmd="$CYAN" ;;
+    esac
+
+    echo -e "   ${icon} ${BOLD}${col_cmd}${cmd}${RESET} : ${GREEN}${out}${RESET}"
 }
 
 show_versions() {
-    # Si la fonction section est disponible, l'utiliser, sinon afficher un header simple
+    # Header stylé (avec couleur si le terminal le supporte)
+    local RESET="\033[0m"
+    local BLUE="\033[34m"
     if declare -f section >/dev/null 2>&1; then
+        # utilise la fonction section (déjà stylée)
         section "VERSIONS INSTALLÉES"
     else
-        echo ""
-        echo "📦 ===== VERSIONS INSTALLÉES ====="
+        echo -e "${BLUE}📦 ═══════════════════════════════════════════════════════════════════════════════${RESET}"
+        echo -e "${BLUE}📦                           VERSIONS INSTALLÉES${RESET}"
+        echo -e "${BLUE}📦 ═══════════════════════════════════════════════════════════════════════════════${RESET}"
     fi
+
     local cmds=(curl wget git zsh bat btop eza rg zoxide duf direnv atuin micro brew gcc apt-get)
     for c in "${cmds[@]}"; do
         try_version "$c"
     done
+
     if [ -d "$HOME_DIR/.oh-my-zsh" ]; then
-        echo "   • oh-my-zsh : installé dans $HOME_DIR/.oh-my-zsh"
+        echo -e "   📂 \033[1moh-my-zsh\033[0m : \033[32minstallé dans $HOME_DIR/.oh-my-zsh\033[0m"
     else
-        echo "   • oh-my-zsh : non installé"
+        echo -e "   📂 \033[1moh-my-zsh\033[0m : \033[31mnon installé\033[0m"
     fi
     echo ""
 }
