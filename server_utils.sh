@@ -152,6 +152,7 @@ try_version() {
         node|nodejs) icon="🔵"; col_cmd="\033[36m" ;;
         docker) icon="🐳"; col_cmd="\033[34m" ;;
         atuin) icon="🛰️"; col_cmd="\033[36m" ;;
+        cat) icon="📄"; col_cmd="\033[36m" ;;
         micro) icon="✍️"; col_cmd="\033[32m" ;;
         brew) icon="🍺"; col_cmd="\033[33m" ;;
         gcc) icon="🔧"; col_cmd="\033[33m" ;;
@@ -175,7 +176,7 @@ show_versions() {
         echo -e "${BLUE}📦 ═══════════════════════════════════════════════════════════════════════════════${RESET}"
     fi
 
-    local cmds=(curl wget git zsh bat btop eza rg zoxide duf direnv atuin micro brew python node docker gcc apt-get)
+    local cmds=(curl wget git zsh bat btop eza rg zoxide duf direnv atuin micro cat brew python node docker gcc apt-get)
     for c in "${cmds[@]}"; do
         try_version "$c"
     done
