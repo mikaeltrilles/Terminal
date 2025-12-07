@@ -43,6 +43,23 @@ section() {
     echo "📦 ═══════════════════════════════════════════════════════════════════════════════"
 }
 
+# Extrait une version numérique depuis une chaîne (ex: "less 668 (GNU...)" -> "668")
+extract_version() {
+    local s="$1"
+    # Cherche le premier pattern 1.2.3 ou 1.2 ou 668 etc.
+    if [[ "$s" =~ ([0-9]+(\.[0-9]+){0,2}([.-][A-Za-z0-9]+)?) ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    # Si rien trouvé, retourne la première suite de chiffres trouvée
+    if [[ "$s" =~ ([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    # fallback: renvoyer la ligne entière
+    echo "$s"
+}
+
 try_version() {
     local cmd="$1"
     # Couleurs
@@ -103,7 +120,8 @@ try_version() {
                             wget) icon="⬇️"; col_cmd="\033[35m" ;;
                             git) icon="🐙"; col_cmd="\033[34m" ;;
                             zsh) icon="💠"; col_cmd="\033[35m" ;;
-                            bat) icon="📚"; col_cmd="\033[33m" ;;
+                                bat) icon="📚"; col_cmd="\033[33m" ;;
+                                less) icon="📘"; col_cmd="\033[36m" ;;
                             btop) icon="📈"; col_cmd="\033[33m" ;;
                             eza) icon="📁"; col_cmd="\033[36m" ;;
                             rg|ripgrep) icon="🔎"; col_cmd="\033[36m" ;;
@@ -136,6 +154,9 @@ try_version() {
         out=$("$path_found" --version 2>&1) || out=$("$path_found" -v 2>&1) || out=$("$path_found" version 2>&1) || out=$("$path_found" -V 2>&1) || out="version inconnue"
     fi
     out=$(echo "$out" | head -n1)
+    # Extraire une version concise
+    local ver
+    ver=$(extract_version "$out" || true)
 
     # icônes et couleurs par outil
     local icon="🔹"
@@ -146,6 +167,7 @@ try_version() {
         git) icon="🐙"; col_cmd="\033[34m" ;;
         zsh) icon="💠"; col_cmd="\033[35m" ;;
         bat) icon="📚"; col_cmd="\033[33m" ;;
+        less) icon="📘"; col_cmd="\033[36m" ;;
         btop) icon="📈"; col_cmd="\033[33m" ;;
         eza) icon="📁"; col_cmd="\033[36m" ;;
         rg|ripgrep) icon="🔎"; col_cmd="\033[36m" ;;
@@ -164,7 +186,11 @@ try_version() {
         *) icon="🔹"; col_cmd="$CYAN" ;;
     esac
 
-    echo -e "   ${icon} ${BOLD}${col_cmd}${cmd}${RESET} : ${GREEN}${out}${RESET}"
+    if [ -n "${ver:-}" ] && [ "${ver}" != "version inconnue" ]; then
+        echo -e "   ${icon} ${BOLD}${col_cmd}${cmd}${RESET} : ${GREEN}${ver}${RESET}"
+    else
+        echo -e "   ${icon} ${BOLD}${col_cmd}${cmd}${RESET} : ${GREEN}${out}${RESET}"
+    fi
 }
 
 show_versions() {
@@ -180,7 +206,7 @@ show_versions() {
         echo -e "${BLUE}📦 ═══════════════════════════════════════════════════════════════════════════════${RESET}"
     fi
 
-    local cmds=(curl wget git zsh bat btop eza rg zoxide duf direnv atuin micro cat brew python node docker gcc apt-get)
+    local cmds=(curl wget git zsh bat less btop eza rg zoxide duf direnv atuin micro cat brew python node docker gcc apt-get)
     for c in "${cmds[@]}"; do
         try_version "$c"
     done
