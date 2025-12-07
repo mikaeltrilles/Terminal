@@ -54,12 +54,21 @@ extract_version() {
     # Parsers spécifiques par commande
     case "$cmd" in
         eza)
-            # eza retourne "eza X.Y.Z - A modern..."
-            # cherche le pattern major.minor.patch après le nom
-            if [[ "$s" =~ eza[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-                echo "${BASH_REMATCH[1]}"
-                return 0
+            # eza --version retourne "eza - A modern, maintained replacement for ls"
+            # Pas de version numérique classique, utiliser un fallback
+            # Chercher dans la sortie complète ou utiliser eza --help
+            if command -v eza >/dev/null 2>&1; then
+                # Essayer eza -v
+                local eza_out
+                eza_out=$(eza -v 2>&1 || eza --help 2>&1 | grep -i version | head -n1 || echo "")
+                if [[ "$eza_out" =~ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+                    echo "${BASH_REMATCH[1]}"
+                    return 0
+                fi
             fi
+            # Fallback: utiliser "dev" si pas de version trouvée
+            echo "dev"
+            return 0
             ;;
     esac
     
