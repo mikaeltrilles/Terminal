@@ -57,7 +57,7 @@ try_version() {
         path_found=$(command -v "$cmd")
     else
         # Cherche dans emplacements communs (user-local et Homebrew)
-        local candidates=("$HOME_DIR/.local/bin/$cmd" "$HOME_DIR/.cargo/bin/$cmd" "$HOME_DIR/.linuxbrew/bin/$cmd" "/home/linuxbrew/.linuxbrew/bin/$cmd" "/usr/local/bin/$cmd" "/snap/bin/$cmd")
+        local candidates=("$HOME_DIR/.local/bin/$cmd" "$HOME_DIR/.cargo/bin/$cmd" "$HOME_DIR/.atuin/bin/$cmd" "$HOME_DIR/.linuxbrew/bin/$cmd" "/home/linuxbrew/.linuxbrew/bin/$cmd" "/usr/local/bin/$cmd" "/snap/bin/$cmd")
         for p in "${candidates[@]}"; do
             if [ -x "$p" ]; then
                 path_found="$p"
