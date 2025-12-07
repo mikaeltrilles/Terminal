@@ -52,14 +52,42 @@ try_version() {
     local RED="\033[31m"
     local CYAN="\033[36m"
 
-    if ! command -v "$cmd" >/dev/null 2>&1; then
+    local path_found=""
+    if command -v "$cmd" >/dev/null 2>&1; then
+        path_found=$(command -v "$cmd")
+    else
+        # Cherche dans emplacements communs (user-local et Homebrew)
+        local candidates=("$HOME_DIR/.local/bin/$cmd" "$HOME_DIR/.cargo/bin/$cmd" "$HOME_DIR/.linuxbrew/bin/$cmd" "/home/linuxbrew/.linuxbrew/bin/$cmd" "/usr/local/bin/$cmd" "/snap/bin/$cmd")
+        for p in "${candidates[@]}"; do
+            if [ -x "$p" ]; then
+                path_found="$p"
+                break
+            fi
+        done
+        # Si toujours pas trouvé, essayer en tant que user détecté (utile si script lancé avec sudo)
+        if [ -z "$path_found" ] && command -v sudo >/dev/null 2>&1 && [ -n "${CURRENT_USER:-}" ] && [ "$CURRENT_USER" != "$(whoami)" ]; then
+            local user_path
+            user_path=$(sudo -u "$CURRENT_USER" command -v "$cmd" 2>/dev/null || true)
+            if [ -n "$user_path" ]; then
+                path_found="$user_path"
+            fi
+        fi
+    fi
+
+    if [ -z "$path_found" ]; then
         # icône et couleur pour absence
         local icon_absent="❌"
         echo -e "   ${icon_absent} ${BOLD}${cmd}${RESET} : ${RED}non installé${RESET}"
         return
     fi
-    local out
-    out=$("$cmd" --version 2>&1) || out=$("$cmd" -v 2>&1) || out=$("$cmd" version 2>&1) || out=$("$cmd" -V 2>&1) || out="version inconnue"
+
+    local out=""
+    # Tenter d'exécuter la commande directement; si le binaire appartient à l'utilisateur détecté, exécuter via sudo -u
+    if [ "${path_found}" != "$(command -v "$cmd" 2>/dev/null || true)" ] && command -v sudo >/dev/null 2>&1 && [ -n "${CURRENT_USER:-}" ] && [ "$CURRENT_USER" != "$(whoami)" ]; then
+        out=$(sudo -u "$CURRENT_USER" "$path_found" --version 2>&1) || out=$(sudo -u "$CURRENT_USER" "$path_found" -v 2>&1) || out=$(sudo -u "$CURRENT_USER" "$path_found" version 2>&1) || out=$(sudo -u "$CURRENT_USER" "$path_found" -V 2>&1) || out="version inconnue"
+    else
+        out=$("$path_found" --version 2>&1) || out=$("$path_found" -v 2>&1) || out=$("$path_found" version 2>&1) || out=$("$path_found" -V 2>&1) || out="version inconnue"
+    fi
     out=$(echo "$out" | head -n1)
 
     # icônes et couleurs par outil
