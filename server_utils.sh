@@ -56,6 +56,11 @@ try_version() {
     if command -v "$cmd" >/dev/null 2>&1; then
         path_found=$(command -v "$cmd")
     else
+        # Special-case: on Debian 'bat' may be installed as 'batcat'
+        if [ "$cmd" = "bat" ] && command -v batcat >/dev/null 2>&1; then
+            path_found=$(command -v batcat)
+        fi
+    else
         # Cherche dans emplacements communs (user-local et Homebrew)
         local candidates=("$HOME_DIR/.local/bin/$cmd" "$HOME_DIR/.cargo/bin/$cmd" "$HOME_DIR/.atuin/bin/$cmd" "$HOME_DIR/.linuxbrew/bin/$cmd" "/home/linuxbrew/.linuxbrew/bin/$cmd" "/usr/local/bin/$cmd" "/snap/bin/$cmd")
         for p in "${candidates[@]}"; do
