@@ -281,7 +281,7 @@ echo " ✅ Tous les prérequis installés !"
 echo ""
 
 # 1. Installation de base
-if [ "$BASE" = 1 ]; then
+if [ "${BASE:-0}" = 1 ]; then
     section "INSTALLATION DE BASE"
     apt_install "less" "1" "7"
     apt_install "btop" "2" "7"
@@ -305,7 +305,7 @@ if [ "$BASE" = 1 ]; then
 fi
 
 # 2. Oh My Zsh
-if [ "$OMZ" = 1 ]; then
+if [ "${OMZ:-0}" = 1 ]; then
     section "OH MY ZSH"
     echo "🤖 Oh My Zsh (officiel)..."
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
@@ -352,7 +352,7 @@ if [ "$OMZ" = 1 ]; then
 fi
 
 # 3. Homebrew ✅ OFFICIEL
-if [ "$BREW" = 1 ]; then
+if [ "${BREW:-0}" = 1 ]; then
     section "HOMEBREW (Linux)"
     if command -v brew >/dev/null 2>&1; then
         echo "✅ Homebrew déjà installé"
