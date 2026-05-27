@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 🚀 TERMINAL SETUP SCRIPT - Installation pour utilisateur actif
+# 🚀 install-terminal.sh — Terminal setup script (production-grade)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
@@ -19,6 +19,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DRY_RUN=0
 AUTO_YES=0
 BACKUP=0
+USER_ONLY=0
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 log_info()  { printf '%s\n' "[INFO] $*" >&2; }
@@ -66,23 +67,26 @@ usage() {
 Usage: ${SCRIPT_NAME} [OPTIONS]
 
 Options:
-  -y, --yes      Auto-confirm prompts (non-interactive)
-  -n, --dry-run  Show what would be done without executing
-  -b, --backup   Backup dotfiles before modification
-  -h, --help     Show this help and exit
+  -y, --yes       Auto-confirm prompts (non-interactive)
+  -n, --dry-run   Show what would be done without executing
+  -b, --backup    Backup dotfiles before modification
+  -u, --user-only Skip system packages (apt), install only user-space tools
+  -h, --help      Show this help and exit
 
 Examples:
   ${SCRIPT_NAME} --yes --backup
   ${SCRIPT_NAME} --dry-run
+  ${SCRIPT_NAME} --user-only --yes
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -y|--yes)     AUTO_YES=1; shift ;;
-        -n|--dry-run) DRY_RUN=1;  shift ;;
-        -b|--backup)  BACKUP=1;   shift ;;
-        -h|--help)    usage; exit 0 ;;
+        -y|--yes)      AUTO_YES=1; shift ;;
+        -n|--dry-run)  DRY_RUN=1;  shift ;;
+        -b|--backup)   BACKUP=1;   shift ;;
+        -u|--user-only)USER_ONLY=1; shift ;;
+        -h|--help)     usage; exit 0 ;;
         *) log_error "Unknown option: $1"; usage; exit 1 ;;
     esac
 done
@@ -108,6 +112,65 @@ backup_file() {
     fi
     cp -p "${target}" "${backup_path}"
     log_info "Backup created: ${backup_path}"
+}
+
+# ─── Dotfiles Snapshot (Git-based rollback) ───────────────────────────────────
+snapshot_dotfiles() {
+    local snapshot_dir="${HOME_DIR}/.dotfiles-backup"
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log_info "[dry-run] Would snapshot dotfiles to ${snapshot_dir}"
+        return 0
+    fi
+    if [[ ! -d "${snapshot_dir}/.git" ]]; then
+        sudo -u "${CURRENT_USER}" git init "${snapshot_dir}" >/dev/null 2>&1 || true
+    fi
+    # Copy current dotfiles into snapshot repo before any changes
+    local files=(.zshrc .bashrc .profile)
+    for f in "${files[@]}"; do
+        local src="${HOME_DIR}/${f}"
+        if [[ -f "${src}" ]]; then
+            cp -p "${src}" "${snapshot_dir}/${f}" 2>/dev/null || true
+        fi
+    done
+    (
+        cd "${snapshot_dir}" >/dev/null 2>&1 || return 0
+        sudo -u "${CURRENT_USER}" git add -A >/dev/null 2>&1 || true
+        sudo -u "${CURRENT_USER}" git commit -m "snapshot before install-terminal ($(date -Iseconds))" >/dev/null 2>&1 || true
+    )
+    log_info "Dotfiles snapshot saved to ${snapshot_dir}"
+}
+
+# ─── Download + Optional SHA-256 Verification ──────────────────────────────────
+download_verify() {
+    local url="$1"
+    local dest="$2"
+    local expected_sha256="${3:-}"
+
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log_info "[dry-run] Would download ${url} -> ${dest}"
+        return 0
+    fi
+
+    if ! curl --proto '=https' --tlsv1.2 -fsSL "${url}" -o "${dest}"; then
+        log_error "Download failed: ${url}"
+        return 1
+    fi
+
+    local computed
+    computed="$(sha256sum "${dest}" | awk '{print $1}')"
+    log_info "Downloaded ${url} -> ${dest} (sha256: ${computed})"
+
+    if [[ -n "${expected_sha256}" ]]; then
+        if [[ "${computed}" != "${expected_sha256}" ]]; then
+            log_error "SHA-256 mismatch for ${url}"
+            log_error "  Expected: ${expected_sha256}"
+            log_error "  Got:      ${computed}"
+            return 1
+        fi
+        log_info "SHA-256 verified for ${url}"
+    else
+        log_warn "No expected SHA-256 provided for ${url}; verify ${computed} manually"
+    fi
 }
 
 # ─── Idempotent RC Append ─────────────────────────────────────────────────────
@@ -155,6 +218,10 @@ append_unique_to_rc() {
 # ─── Package Helpers ──────────────────────────────────────────────────────────
 apt_install() {
     local pkg="$1" count="$2" total="$3"
+    if [[ "${USER_ONLY}" -eq 1 ]]; then
+        log_info "[user-only] Skipping apt package ${pkg}"
+        return 0
+    fi
     if [[ "${DRY_RUN}" -eq 1 ]]; then
         log_info "[dry-run] Would apt-get install ${pkg} (${count}/${total})"
         return 0
@@ -325,14 +392,16 @@ show_versions() {
 }
 
 # ─── Pre-flight Checks ────────────────────────────────────────────────────────
-if ! command -v apt-get >/dev/null 2>&1; then
-    log_error "Compatible Debian/Ubuntu uniquement"
-    exit 1
-fi
+if [[ "${USER_ONLY}" -eq 0 ]] && [[ "${DRY_RUN}" -eq 0 ]]; then
+    if ! command -v apt-get >/dev/null 2>&1; then
+        log_error "Compatible Debian/Ubuntu uniquement (or use --user-only)"
+        exit 1
+    fi
 
-if ! command -v sudo >/dev/null 2>&1; then
-    log_error "Installez sudo d'abord"
-    exit 1
+    if ! command -v sudo >/dev/null 2>&1; then
+        log_error "Installez sudo d'abord (or use --user-only)"
+        exit 1
+    fi
 fi
 
 # ─── Interactive or Auto Mode ─────────────────────────────────────────────────
@@ -380,6 +449,9 @@ esac
 
 log_info "Début installation... (${CHOICE} sélectionné)"
 
+# Snapshot dotfiles before any mutation
+snapshot_dotfiles
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # 📦 PRÉREQUIS
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -388,7 +460,7 @@ section "PRÉREQUIS"
 PACKAGES=(curl wget git zsh build-essential procps file locales-all)
 readonly TOTAL_PREREQS="${#PACKAGES[@]}"
 
-if [[ "${DRY_RUN}" -eq 0 ]]; then
+if [[ "${DRY_RUN}" -eq 0 ]] && [[ "${USER_ONLY}" -eq 0 ]]; then
     sudo apt-get update -y >/dev/null 2>&1
 fi
 
@@ -418,7 +490,7 @@ if [[ "${BASE}" -eq 1 ]]; then
         log_info "[dry-run] Would download and install atuin"
     else
         atuin_script="${SCRIPT_TMPDIR}/atuin-install.sh"
-        if curl --proto '=https' --tlsv1.2 -sSfL "https://setup.atuin.sh" -o "${atuin_script}"; then
+        if download_verify "https://setup.atuin.sh" "${atuin_script}"; then
             bash "${atuin_script}"
         else
             log_warn "Failed to download atuin installer"
@@ -431,12 +503,16 @@ if [[ "${BASE}" -eq 1 ]]; then
     if [[ "${DRY_RUN}" -eq 1 ]]; then
         log_info "[dry-run] Would install micro to /usr/local/bin"
     else
-        sudo mkdir -p /usr/local/bin
-        micro_script="${SCRIPT_TMPDIR}/micro-install.sh"
-        if curl -sSfL "https://getmic.ro" -o "${micro_script}"; then
-            (cd /usr/local/bin && sudo bash "${micro_script}")
+        if [[ "${USER_ONLY}" -eq 0 ]]; then
+            sudo mkdir -p /usr/local/bin
+            micro_script="${SCRIPT_TMPDIR}/micro-install.sh"
+            if download_verify "https://getmic.ro" "${micro_script}"; then
+                (cd /usr/local/bin && sudo bash "${micro_script}")
+            else
+                log_warn "Failed to download micro installer"
+            fi
         else
-            log_warn "Failed to download micro installer"
+            log_warn "[user-only] Micro requires system install; skipped. Install manually to ~/.local/bin if needed."
         fi
     fi
     log_info "Micro installé"
@@ -453,7 +529,8 @@ if [[ "${OMZ}" -eq 1 ]]; then
         log_info "[dry-run] Would install Oh My Zsh for ${CURRENT_USER}"
     else
         omz_script="${SCRIPT_TMPDIR}/omz-install.sh"
-        if curl -fsSL "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh" -o "${omz_script}"; then
+        # OMZ official installer URL (pinned to master, no static SHA-256 available)
+        if download_verify "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh" "${omz_script}"; then
             sudo -u "${CURRENT_USER}" bash "${omz_script}" "" --unattended
         else
             log_error "Failed to download Oh My Zsh installer"
@@ -484,7 +561,7 @@ if [[ "${OMZ}" -eq 1 ]]; then
 
     append_unique_to_rc ".zshrc" "oh-my-zsh aliases and plugins" "${payload}"
 
-    maj_payload='maj() { echo "🍓  Mise à jour complète"; echo "──────────────────────────────────────────"; echo -e "\n📦  Mise à jour des dépôts APT..."; sudo apt-get update -y; echo -e "\n⚙️  Installation des mises à jour disponibles..."; sudo apt-get upgrade -y; echo -e "\n🚀  Mise à niveau de la distribution..."; sudo apt-get dist-upgrade -y; if command -v brew >/dev/null 2>&1; then echo -e "\n☕️  Mise à jour Homebrew..."; brew update; echo -e "\n📦  Mise à niveau des paquets Homebrew..."; brew upgrade; echo -e "\n🧹  Nettoyage Homebrew..."; brew autoremove; fi; echo -e "\n🧹  Nettoyage des paquets obsolètes..."; sudo apt-get autoremove -y; sudo apt-get autoclean -y; sudo apt-get clean; echo -e "\n🏁  Mise à jour terminée avec succès ! 🎉"; echo "──────────────────────────────────────────"; }'
+    maj_payload='maj() { echo "🍓  Mise à jour complète"; echo "──────────────────────────────────────────"; echo -e "\n📦  Mise à jour des dépôts APT..."; if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then sudo apt-get update -y; echo -e "\n⚙️  Installation des mises à jour disponibles..."; sudo apt-get upgrade -y; echo -e "\n🚀  Mise à niveau de la distribution..."; sudo apt-get dist-upgrade -y; fi; if command -v brew >/dev/null 2>&1; then echo -e "\n☕️  Mise à jour Homebrew..."; brew update; echo -e "\n📦  Mise à niveau des paquets Homebrew..."; brew upgrade; echo -e "\n🧹  Nettoyage Homebrew..."; brew autoremove; fi; if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then echo -e "\n🧹  Nettoyage des paquets obsolètes..."; sudo apt-get autoremove -y; sudo apt-get autoclean -y; sudo apt-get clean; fi; echo -e "\n🏁  Mise à jour terminée avec succès ! 🎉"; echo "──────────────────────────────────────────"; }'
     append_unique_to_rc ".zshrc" "maj update function" "${maj_payload}"
 
     chown "${CURRENT_USER}:${CURRENT_USER}" "${HOME_DIR}/.zshrc" 2>/dev/null || true
@@ -504,7 +581,7 @@ if [[ "${BREW}" -eq 1 ]]; then
             log_info "[dry-run] Would install Homebrew"
         else
             brew_script="${SCRIPT_TMPDIR}/brew-install.sh"
-            if curl -fsSL "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh" -o "${brew_script}"; then
+            if download_verify "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh" "${brew_script}"; then
                 NONINTERACTIVE=1 sudo -u "${CURRENT_USER}" /bin/bash "${brew_script}"
             else
                 log_error "Failed to download Homebrew installer"
@@ -516,7 +593,9 @@ if [[ "${BREW}" -eq 1 ]]; then
         chown "${CURRENT_USER}:${CURRENT_USER}" "${HOME_DIR}/.zshrc" 2>/dev/null || true
 
         if [[ "${DRY_RUN}" -eq 0 ]]; then
-            sudo apt-get install -y build-essential
+            if [[ "${USER_ONLY}" -eq 0 ]]; then
+                sudo apt-get install -y build-essential
+            fi
             if command -v brew >/dev/null 2>&1; then
                 brew install gcc
             fi
