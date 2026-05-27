@@ -1,145 +1,129 @@
-# 🚀 Terminal Setup Script
+# 🚀 install-terminal.sh
 
-Transformez votre terminal en 1 clic ! 🛠️🐚🍺
-Script d'installation moderne pour Debian/Ubuntu avec menu interactif et thème Jonathan par défaut ✨
+Script de provisioning production-grade pour configurer un terminal Linux moderne (Zsh, Oh My Zsh, Homebrew, outils CLI) sur Debian/Ubuntu.
 
-## 🎯 Installation en 1 ligne
+## ✨ Fonctionnalités
 
-```bash
-bash -c "$(curl -s https://raw.githubusercontent.com/mikaeltrilles/Terminal/refs/heads/main/server_utils.sh)"
-```
+- **Strict mode** : `set -euo pipefail` avec gestion d'erreurs centralisée (`trap ERR`).
+- **Idempotent** : ré-exécutable sans effets secondaires néfastes (marqueurs dans `.zshrc`, check `dpkg -s`).
+- **Sécurisé** : plus de `curl | sh` — tous les installers sont téléchargés dans un tmpdir et exécutés ensuite.
+- **Vérification SHA-256** : helper `download_verify()` pour valider les scripts téléchargés (optionnel).
+- **Rollback** : snapshot Git des dotfiles dans `~/.dotfiles-backup` avant toute mutation.
+- **Mode non-root** : `--user-only` permet d'exécuter le script sans `apt-get` ni `sudo`.
+- **Dry-run** : `--dry-run` affiche ce qui serait fait sans modifier le système.
 
-## 📋 Menu interactif (4 options)
+## 📋 Prérequis
 
-```text
-1) 🛠️  Installation de base (Zsh + outils essentiels)
-2) 🐚 Installation Oh My Zsh (sh -c .../install.sh)
-3) 🍺 Installation Homebrew (Linux non-root)
-4) 🔥 Installation complète (1+2+3)
-```
+- Debian/Ubuntu (ou utiliser `--user-only` pour un mode sans apt)
+- `bash`, `curl`, `git`
+- `sudo` (sauf en mode `--user-only`)
 
-## 📦 Paquets installés
-
-### 🛠️ Prérequis (7 paquets)
-
-| Paquet          | Description                  |
-| --------------- | ---------------------------- |
-| curl            | 📥 Téléchargements sécurisés |
-| wget            | ⬇️ Téléchargeur robuste      |
-| git             | 🐘 Gestionnaire de versions  |
-| zsh             | 🐚 Shell moderne & rapide    |
-| build-essential | 🔨 Compilateurs C/C++        |
-| procps          | ⚙️ Outils système            |
-| file            | 🔍 Détection de types MIME   |
-
-### 🛠️ Base (7 outils CLI modernes)
-
-| Outil   | Remplace | Description                    |
-| ------- | -------- | ------------------------------ |
-| bat     | cat      | 📄 cat avec syntaxe & git      |
-| btop    | htop     | 📊 Moniteur système moderne    |
-| eza     | ls       | 🌈 ls coloré & icons           |
-| ripgrep | grep     | ⚡ Recherche ultra-rapide      |
-| zoxide  | cd       | 🧠 Navigation intelligente     |
-| duf     | df       | 📊 Disques avec style          |
-| direnv  | -        | 🌍 Variables d'env par dossier |
-
-### 🤖 Outils additionnels
-
-| Outil | Description                 |
-| ----- | --------------------------- |
-| atuin | 📝 Historique synchronisé   |
-| micro | ✏️ Éditeur moderne (nano++) |
-
-### 🐚 Oh My Zsh + Plugins
-
-| Composant               | Description                 |
-| ----------------------- | --------------------------- |
-| Thème                   | 🎨 jonathan (par défaut)    |
-| zsh-autosuggestions     | 💡 Suggestions automatiques |
-| zsh-syntax-highlighting | 🌈 Syntaxe colorée          |
-
-### ✨ Aliases & Fonctions intégrés
-
-#### 🔄 Relâche config
-
-alias relbash="source ~/.zshrc"
-
-#### ✏️ Éditer config
-
-alias zshconfig="nano ~/.zshrc"
-
-#### 🍓 Mise à jour complète (RPi)
-
-alias maj="maj"  # APT + Brew + Firmware + Nettoyage
-
-🚀 Utilisation rapide
-Option 1 - Base uniquement
+## 🚀 Utilisation
 
 ```bash
-bash -c "$(curl -s https://raw.githubusercontent.com/mikaeltrilles/Terminal/refs/heads/main/server_utils.sh)"
-# Entrez : 1
+# Installation interactive complète
+./install-terminal.sh
+
+# Installation non-interactive complète avec backups
+./install-terminal.sh --yes --backup
+
+# Preview (rien n'est modifié)
+./install-terminal.sh --dry-run --yes
+
+# Mode utilisateur uniquement (pas d'apt, pas de sudo)
+./install-terminal.sh --user-only --yes
+
+# Afficher les versions installées
+./install-terminal.sh --dry-run --yes   # option 5 dans le menu
 ```
 
-Option 4 - Installation complète
+## 🔧 Options CLI
+
+| Option | Description |
+|--------|-------------|
+| `-y, --yes` | Mode non-interactif (sélectionne l'option 4) |
+| `-n, --dry-run` | Affiche le plan sans exécuter |
+| `-b, --backup` | Backup `.zshrc` etc. avant modification |
+| `-u, --user-only` | Skip les paquets système (`apt-get`) |
+| `-h, --help` | Affiche l'aide |
+
+## 📦 Ce qui est installé
+
+### Paquets système (apt)
+- `zsh`, `git`, `curl`, `wget`, `build-essential`, `procps`, `file`, `locales-all`
+- `less`, `btop`, `eza`, `ripgrep`, `zoxide`, `duf`, `direnv`
+
+### Outils utilisateur
+- **Oh My Zsh** — avec thème `jonathan`
+- **Plugins OMZ** : `zsh-autosuggestions`, `zsh-syntax-highlighting`
+- **Homebrew** (Linux)
+- **Atuin** (shell history)
+- **Micro** (éditeur)
+
+### Aliases ajoutés
+- `cat` → `bat` (ou `batcat`/`less` en fallback)
+- `grep` → `rg`
+- `relbash` → `source ~/.zshrc`
+- `cls` → `clear`
+- `maj()` → mise à jour complète (apt + brew)
+
+## 🔐 Sécurité
+
+- Aucun `curl | bash` direct : les scripts sont téléchargés puis vérifiés.
+- L'installateur OMZ s'exécute en tant qu'utilisateur cible (`sudo -u`), pas en root.
+- Les appends dans `.zshrc` sont idempotents (marqueur `# marker:<name>`).
+- Les dotfiles sont snapshotés dans un repo Git avant modification.
+
+## 🧪 Tests
 
 ```bash
-bash -c "$(curl -s https://raw.githubusercontent.com/mikaeltrilles/Terminal/refs/heads/main/server_utils.sh)"
-# Entrez : 4 (défaut)
+# Syntaxe
+bash -n install-terminal.sh
+
+# Lint
+shellcheck install-terminal.sh
+
+# Format
+shfmt -w -i 4 -ci install-terminal.sh
+
+# Smoke tests (nécessite bats)
+bats tests/smoke.bats
+
+# Tests manuels
+./install-terminal.sh --help
+./install-terminal.sh --dry-run --yes
+./install-terminal.sh --dry-run --yes --user-only
 ```
 
-#### ⚙️ Fonctionnalités avancées
+## 🔄 Rollback
 
-✅ Utilisateur actif détecté automatiquement
-
-✅ Compteurs progressifs 1/7 → 7/7
-
-✅ Installation silencieuse (logs propres)
-
-✅ Shell Zsh par défaut (chsh)
-
-✅ Lancement auto Oh My Zsh à la fin
-
-✅ Homebrew Linux non-root (/home/linuxbrew)
-
-✅ Gestion sudo transparente
-
-
-#### 🛡️ Prérequis
-
-✅ Debian/Ubuntu/Raspberry Pi OS
-✅ sudo installé
-✅ Accès internet
-
-#### 🔧 Personnalisation
+Si un changement pose problème, restaurer depuis le snapshot Git :
 
 ```bash
-# Thème personnalisé
-sed -i 's/jonathan/votre-theme/g' ~/.zshrc
-relbash
-
-# Ajout plugins OMZ
-git clone https://github.com/zsh-users/zsh-plugin ~/.oh-my-zsh/custom/plugins/
+cd ~/.dotfiles-backup
+git log --oneline          # trouver le snapshot avant install
+git checkout HEAD~1        # ou le hash du commit
+cp .zshrc ~/.zshrc         # restaurer le fichier souhaité
 ```
 
-#### 📊 Performances
+## 🏗️ CI / GitHub Actions
 
-| Opération   | Temps estimé |
-| ----------- | ------------ |
-| Prérequis   | 30s          |
-| Base outils | 45s          |
-| Oh My Zsh   | 20s          |
-| Homebrew    | 2min         |
-| Complet     | ~3min        |
+Le workflow `.github/workflows/shell-lint.yml` s'exécute sur chaque push/PR :
 
-#### 📄 Licence
+- **shellcheck** — warnings et erreurs
+- **shfmt** — vérification du formatage
+- **integration** — `bash -n`, `--dry-run --yes`, `--help`
 
-MIT License - Free & Open Source ✨
+## 📝 Checksums des scripts téléchargés
 
-🤝 Contribuer
+Pour activer la vérification SHA-256, passer le hash attendu à `download_verify()` :
 
 ```bash
-git clone https://github.com/mikaeltrilles/Terminal.git
-cd Terminal
-# Testez, modifiez, PR !
+download_verify "https://example.com/install.sh" "/tmp/install.sh" "a1b2c3..."
 ```
+
+Par défaut, le script affiche le hash calculé avec un warning s'il n'est pas vérifié.
+
+## 📄 Licence
+
+MIT — voir le repo.
