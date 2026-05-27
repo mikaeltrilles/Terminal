@@ -28,4 +28,15 @@ jobs:
           wget -qO- https://github.com/mvdan/sh/releases/download/v3.8.0/shfmt_v3.8.0_linux_amd64.tar.gz | tar -xz -C /tmp shfmt
           sudo mv /tmp/shfmt /usr/local/bin/shfmt
       - name: Check formatting
-        run: shfmt -d -i 4 -ci server_utils.sh
+        run: shfmt -d -i 4 -ci install-terminal.sh
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        run: bash -n install-terminal.sh
+      - name: Dry-run smoke test
+        run: ./install-terminal.sh --dry-run --yes
+      - name: Help returns 0
+        run: ./install-terminal.sh --help
