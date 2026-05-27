@@ -7,15 +7,20 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# ─── Guards ───────────────────────────────────────────────────────────────────
-if [[ "${BASH_SOURCE[0]:-}" != "${0}" ]]; then
-    echo "ERROR: This script must be saved to a file and executed directly (not piped or sourced)" >&2
-    exit 1
+# ─── Pipe Detection ───────────────────────────────────────────────────────────
+IS_PIPED=0
+if [[ ! -t 0 ]]; then
+    IS_PIPED=1
 fi
 
 # ─── Configuration ────────────────────────────────────────────────────────────
-readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+    readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+    readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    readonly SCRIPT_NAME="install-terminal.sh"
+    readonly SCRIPT_DIR="$(pwd)"
+fi
 DRY_RUN=0
 AUTO_YES=0
 BACKUP=0
@@ -90,6 +95,12 @@ while [[ $# -gt 0 ]]; do
         *) log_error "Unknown option: $1"; usage; exit 1 ;;
     esac
 done
+
+# ─── Pipe safety: when piped via curl|bash, force --yes so read does not consume stdin ──
+if [[ "${IS_PIPED}" -eq 1 && "${AUTO_YES}" -eq 0 ]]; then
+    AUTO_YES=1
+    log_info "Detected piped execution (curl | bash); forcing --yes to avoid interactive stdin reads"
+fi
 
 # ─── Display ────────────────────────────────────────────────────────────────────
 section() {
