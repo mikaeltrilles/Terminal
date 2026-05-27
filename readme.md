@@ -20,21 +20,31 @@ Script de provisioning production-grade pour configurer un terminal Linux modern
 
 ## 🚀 Utilisation
 
+### En une ligne (curl | bash)
+
 ```bash
-# Installation interactive complète
-./install-terminal.sh
+# Installation complète (non-interactive, option 4 par défaut)
+curl -fsSL https://raw.githubusercontent.com/mikaeltrilles/Terminal/main/install-terminal.sh | bash
 
-# Installation non-interactive complète avec backups
-./install-terminal.sh --yes --backup
+# Avec arguments (nécessite bash -s --)
+curl -fsSL https://raw.githubusercontent.com/mikaeltrilles/Terminal/main/install-terminal.sh | bash -s -- --dry-run
+curl -fsSL https://raw.githubusercontent.com/mikaeltrilles/Terminal/main/install-terminal.sh | bash -s -- --user-only
+curl -fsSL https://raw.githubusercontent.com/mikaeltrilles/Terminal/main/install-terminal.sh | bash -s -- --yes --backup
+```
 
-# Preview (rien n'est modifié)
-./install-terminal.sh --dry-run --yes
+### Mode fichier local (recommandé pour review)
 
-# Mode utilisateur uniquement (pas d'apt, pas de sudo)
-./install-terminal.sh --user-only --yes
+```bash
+# Télécharger d'abord
+curl -fsSL -o install-terminal.sh https://raw.githubusercontent.com/mikaeltrilles/Terminal/main/install-terminal.sh
 
-# Afficher les versions installées
-./install-terminal.sh --dry-run --yes   # option 5 dans le menu
+# Vérifier le contenu (optionnel mais recommandé)
+cat install-terminal.sh
+
+# Exécuter
+chmod +x install-terminal.sh
+./install-terminal.sh --dry-run --yes   # preview
+./install-terminal.sh --yes --backup    # install
 ```
 
 ## 🔧 Options CLI
@@ -69,7 +79,8 @@ Script de provisioning production-grade pour configurer un terminal Linux modern
 
 ## 🔐 Sécurité
 
-- Aucun `curl | bash` direct : les scripts sont téléchargés puis vérifiés.
+- **Supporte `curl | bash`** : le script détecte un pipe (`[[ ! -t 0 ]]`) et force automatiquement `--yes` pour éviter que `read` ne consomme le contenu du script via stdin.
+- Les installateurs internes (OMZ, Homebrew, Atuin, Micro) sont téléchargés dans un tmpdir, pas exécutés directement en pipe.
 - L'installateur OMZ s'exécute en tant qu'utilisateur cible (`sudo -u`), pas en root.
 - Les appends dans `.zshrc` sont idempotents (marqueur `# marker:<name>`).
 - Les dotfiles sont snapshotés dans un repo Git avant modification.
