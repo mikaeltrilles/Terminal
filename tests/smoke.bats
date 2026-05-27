@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-# Smoke tests pour server_utils.sh
+# Smoke tests pour install-terminal.sh
 # Usage : bash tests/smoke.bats   (nécessite bats)
 # Ou    : bash tests/smoke.sh    (sans bats)
 
 set -euo pipefail
 
-SCRIPT="${SCRIPT:-./server_utils.sh}"
+SCRIPT="${SCRIPT:-./install-terminal.sh}"
 
 @test "syntaxe valide" {
     bash -n "${SCRIPT}"
@@ -22,6 +22,12 @@ SCRIPT="${SCRIPT:-./server_utils.sh}"
     run "${SCRIPT}" --dry-run --yes
     [ "$status" -eq 0 ]
     [[ "$output" == *"[dry-run]"* ]]
+}
+
+@test "--user-only skip apt checks" {
+    run "${SCRIPT}" --dry-run --yes --user-only
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"[user-only]"* ]]
 }
 
 @test "option invalide retourne 1" {
