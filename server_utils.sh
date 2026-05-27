@@ -1,107 +1,220 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 🚀 TERMINAL SETUP SCRIPT - Installation pour utilisateur actif
 # ═══════════════════════════════════════════════════════════════════════════════
 
-clear
-echo "🔥 ═══════════════════════════════════════════════════════════════════════════════"
-echo "           🚀 TERMINAL SETUP - Menu d'installation"
-echo "🔥 ═══════════════════════════════════════════════════════════════════════════════"
-echo ""
-
 set -euo pipefail
 IFS=$'\n\t'
-trap 'echo "Erreur sur la ligne $LINENO"; exit 1' ERR
 
-# Détection utilisateur actif (favorise SUDO_USER si présent)
-if [ -n "${SUDO_USER:-}" ]; then
-    CURRENT_USER="$SUDO_USER"
-else
-    CURRENT_USER=$(logname 2>/dev/null || whoami)
+# ─── Guards ───────────────────────────────────────────────────────────────────
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+    echo "ERROR: This script must be run, not sourced" >&2
+    exit 1
 fi
 
-# Détecter le répertoire home réel via getent si possible
-HOME_DIR=$(getent passwd "$CURRENT_USER" | cut -d: -f6 2>/dev/null || true)
-if [ -z "$HOME_DIR" ]; then
-    if [ "$CURRENT_USER" = "root" ]; then
+# ─── Configuration ────────────────────────────────────────────────────────────
+readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DRY_RUN=0
+AUTO_YES=0
+BACKUP=0
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+log_info()  { printf '%s\n' "[INFO] $*" >&2; }
+log_warn()  { printf '%s\n' "[WARN] $*" >&2; }
+log_error() { printf '%s\n' "[ERROR] $*" >&2; }
+
+# ─── Error Handler ──────────────────────────────────────────────────────────────
+err_handler() {
+    local rc=$?
+    local line=$1
+    log_error "Unexpected error at line ${line} (exit code ${rc})"
+    exit "${rc:-1}"
+}
+trap 'err_handler ${LINENO}' ERR
+
+# ─── Cleanup ──────────────────────────────────────────────────────────────────
+readonly SCRIPT_TMPDIR="$(mktemp -d -t "install-term.XXXXXX")"
+cleanup() { rm -rf "${SCRIPT_TMPDIR}"; }
+trap cleanup EXIT
+
+# ─── User Detection ───────────────────────────────────────────────────────────
+if [[ -n "${SUDO_USER:-}" ]]; then
+    CURRENT_USER="${SUDO_USER}"
+else
+    CURRENT_USER="$(logname 2>/dev/null || whoami)"
+fi
+readonly CURRENT_USER
+
+HOME_DIR=""
+if command -v getent >/dev/null 2>&1; then
+    HOME_DIR="$(getent passwd "${CURRENT_USER}" | cut -d: -f6)" || HOME_DIR=""
+fi
+if [[ -z "${HOME_DIR}" ]]; then
+    if [[ "${CURRENT_USER}" == "root" ]]; then
         HOME_DIR="/root"
     else
-        HOME_DIR="/home/$CURRENT_USER"
+        HOME_DIR="/home/${CURRENT_USER}"
     fi
 fi
+readonly HOME_DIR
 
-echo "👤 Utilisateur détecté : $CURRENT_USER"
-echo "🏠 Home : $HOME_DIR"
-echo ""
+# ─── CLI Parsing ──────────────────────────────────────────────────────────────
+usage() {
+    cat >&2 <<EOF
+Usage: ${SCRIPT_NAME} [OPTIONS]
 
-# Fonctions utilitaires pour affichage des versions
-section() {
-    echo ""
-    echo "📦 ═══════════════════════════════════════════════════════════════════════════════"
-    echo "📦                           $1"
-    echo "📦 ═══════════════════════════════════════════════════════════════════════════════"
+Options:
+  -y, --yes      Auto-confirm prompts (non-interactive)
+  -n, --dry-run  Show what would be done without executing
+  -b, --backup   Backup dotfiles before modification
+  -h, --help     Show this help and exit
+
+Examples:
+  ${SCRIPT_NAME} --yes --backup
+  ${SCRIPT_NAME} --dry-run
+EOF
 }
 
-# Normalise et extrait une version numérique depuis une chaîne
-# Retourne au format major.minor.patch (ex: "less 668 (GNU...)" -> "668")
-# ou major.minor.patch-suffix si présent (ex: "1.2.3-rc1")
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -y|--yes)     AUTO_YES=1; shift ;;
+        -n|--dry-run) DRY_RUN=1;  shift ;;
+        -b|--backup)  BACKUP=1;   shift ;;
+        -h|--help)    usage; exit 0 ;;
+        *) log_error "Unknown option: $1"; usage; exit 1 ;;
+    esac
+done
+
+# ─── Display ────────────────────────────────────────────────────────────────────
+section() {
+    printf '\n📦 ═══════════════════════════════════════════════════════════════════════════════\n'
+    printf '📦                           %s\n' "$1"
+    printf '📦 ═══════════════════════════════════════════════════════════════════════════════\n'
+}
+
+# ─── Safe Backup ──────────────────────────────────────────────────────────────
+backup_file() {
+    local target="$1"
+    if [[ "${BACKUP}" -eq 0 ]] || [[ ! -f "${target}" ]]; then
+        return 0
+    fi
+    local backup_path
+    backup_path="${target}.backup.$(date +%Y%m%d%H%M%S)"
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log_info "[dry-run] Would backup ${target} -> ${backup_path}"
+        return 0
+    fi
+    cp -p "${target}" "${backup_path}"
+    log_info "Backup created: ${backup_path}"
+}
+
+# ─── Idempotent RC Append ─────────────────────────────────────────────────────
+# Appends a block only if its unique marker is not already present.
+append_unique_to_rc() {
+    local file="$1"
+    local marker="$2"
+    local payload="$3"
+    local base
+    base="$(basename "${file}")"
+    if [[ "${base}" != .* ]]; then
+        base=".${base}"
+    fi
+    local target
+    target="${HOME_DIR}/${base}"
+
+    if [[ ! -f "${target}" ]]; then
+        if [[ "${DRY_RUN}" -eq 1 ]]; then
+            log_info "[dry-run] Would create ${target}"
+            return 0
+        fi
+        touch "${target}"
+    fi
+
+    # Idempotency: skip if marker already present
+    if [[ -f "${target}" ]] && grep -qF "# marker:${marker}" "${target}" 2>/dev/null; then
+        log_info "Already present in ${target} (marker=${marker}), skipping"
+        return 0
+    fi
+
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log_info "[dry-run] Would append to ${target}: ${marker}"
+        return 0
+    fi
+
+    backup_file "${target}"
+    {
+        printf '# marker:%s (%s)\n' "${marker}" "$(date -Iseconds)"
+        printf '%s\n' "${payload}"
+    } >> "${target}"
+    chown "${CURRENT_USER}:${CURRENT_USER}" "${target}" 2>/dev/null || true
+    log_info "${target} updated (${marker})"
+}
+
+# ─── Package Helpers ──────────────────────────────────────────────────────────
+apt_install() {
+    local pkg="$1" count="$2" total="$3"
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log_info "[dry-run] Would apt-get install ${pkg} (${count}/${total})"
+        return 0
+    fi
+    if dpkg -s "${pkg}" >/dev/null 2>&1; then
+        printf '   (%s/%s) ✅ %s (already installed)\n' "${count}" "${total}" "${pkg}"
+        return 0
+    fi
+    if sudo apt-get install -y "${pkg}" >/dev/null 2>&1; then
+        printf '   (%s/%s) ✅ %s\n' "${count}" "${total}" "${pkg}"
+    else
+        printf '   (%s/%s) ❌ %s\n' "${count}" "${total}" "${pkg}"
+    fi
+}
+
+# ─── Version Extraction ───────────────────────────────────────────────────────
 extract_version() {
     local s="$1"
-    local cmd="$2" # optionnel: nom de la commande pour parsing spécifique
-    local ver=""
-    
-    # Parsers spécifiques par commande
-    case "$cmd" in
+    local cmd="${2:-}"
+
+    case "${cmd}" in
         eza)
-            # eza --version retourne "eza - A modern, maintained replacement for ls"
-            # Pas de version numérique classique, utiliser un fallback
-            # Chercher dans la sortie complète ou utiliser eza --help
             if command -v eza >/dev/null 2>&1; then
-                # Essayer eza -v
                 local eza_out
-                eza_out=$(eza -v 2>&1 || eza --help 2>&1 | grep -i version | head -n1 || echo "")
-                if [[ "$eza_out" =~ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-                    echo "${BASH_REMATCH[1]}"
+                eza_out="$(eza -v 2>&1 || eza --help 2>&1 | grep -i version | head -n1 || true)"
+                if [[ "${eza_out}" =~ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+                    printf '%s\n' "${BASH_REMATCH[1]}"
                     return 0
                 fi
             fi
-            # Fallback: utiliser "dev" si pas de version trouvée
-            echo "dev"
+            printf '%s\n' "dev"
             return 0
             ;;
     esac
-    
-    # Cherche le pattern complet: major.minor.patch ou major.minor ou major
-    # suivi optionnellement d'un suffixe (-alpha, -rc1, etc.)
-    if [[ "$s" =~ ([0-9]+\.[0-9]+\.[0-9]+)([-._][A-Za-z0-9]+)? ]]; then
-        # Pattern complet major.minor.patch trouvé
-        ver="${BASH_REMATCH[1]}"
-        [ -n "${BASH_REMATCH[2]:-}" ] && ver="${ver}${BASH_REMATCH[2]}"
-        echo "$ver"
+
+    if [[ "${s}" =~ ([0-9]+\.[0-9]+\.[0-9]+)([-._][A-Za-z0-9]+)? ]]; then
+        local ver="${BASH_REMATCH[1]}"
+        if [[ -n "${BASH_REMATCH[2]:-}" ]]; then
+            ver="${ver}${BASH_REMATCH[2]}"
+        fi
+        printf '%s\n' "${ver}"
         return 0
     fi
-    
-    # Sinon cherche major.minor
-    if [[ "$s" =~ ([0-9]+\.[0-9]+) ]]; then
-        ver="${BASH_REMATCH[1]}"
-        echo "$ver"
+
+    if [[ "${s}" =~ ([0-9]+\.[0-9]+) ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
         return 0
     fi
-    
-    # Sinon juste major (dernier recours pour des cas comme "less 668")
-    if [[ "$s" =~ ([0-9]+) ]]; then
-        echo "${BASH_REMATCH[1]}"
+
+    if [[ "${s}" =~ ([0-9]+) ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
         return 0
     fi
-    
-    # fallback: renvoyer la ligne entière
-    echo "$s"
+
+    printf '%s\n' "${s}"
 }
 
+# ─── Version Check ────────────────────────────────────────────────────────────
 try_version() {
     local cmd="$1"
-    # Couleurs
     local RESET="\033[0m"
     local BOLD="\033[1m"
     local GREEN="\033[32m"
@@ -109,376 +222,344 @@ try_version() {
     local CYAN="\033[36m"
 
     local path_found=""
-    if command -v "$cmd" >/dev/null 2>&1; then
-        path_found=$(command -v "$cmd")
-    else
-        # Special-case: on Debian 'bat' may be installed as 'batcat'
-        if [ "$cmd" = "bat" ] && command -v batcat >/dev/null 2>&1; then
-            path_found=$(command -v batcat)
-        fi
-        # Cherche dans emplacements communs (user-local et Homebrew)
-        local candidates=("$HOME_DIR/.local/bin/$cmd" "$HOME_DIR/.cargo/bin/$cmd" "$HOME_DIR/.atuin/bin/$cmd" "$HOME_DIR/.linuxbrew/bin/$cmd" "/home/linuxbrew/.linuxbrew/bin/$cmd" "/usr/local/bin/$cmd" "/snap/bin/$cmd")
+
+    if command -v "${cmd}" >/dev/null 2>&1; then
+        path_found="$(command -v "${cmd}")"
+    elif [[ "${cmd}" == "bat" ]] && command -v batcat >/dev/null 2>&1; then
+        path_found="$(command -v batcat)"
+    fi
+
+    if [[ -z "${path_found}" ]]; then
+        local candidates=(
+            "${HOME_DIR}/.local/bin/${cmd}"
+            "${HOME_DIR}/.cargo/bin/${cmd}"
+            "${HOME_DIR}/.atuin/bin/${cmd}"
+            "${HOME_DIR}/.linuxbrew/bin/${cmd}"
+            "/home/linuxbrew/.linuxbrew/bin/${cmd}"
+            "/usr/local/bin/${cmd}"
+            "/snap/bin/${cmd}"
+        )
         for p in "${candidates[@]}"; do
-            if [ -x "$p" ]; then
-                path_found="$p"
+            if [[ -x "${p}" ]]; then
+                path_found="${p}"
                 break
             fi
         done
-        # Si toujours pas trouvé, essayer en tant que user détecté (utile si script lancé avec sudo)
-        if [ -z "$path_found" ] && command -v sudo >/dev/null 2>&1 && [ -n "${CURRENT_USER:-}" ] && [ "$CURRENT_USER" != "$(whoami)" ]; then
-            local user_path
-            user_path=$(sudo -u "$CURRENT_USER" command -v "$cmd" 2>/dev/null || true)
-            if [ -n "$user_path" ]; then
-                path_found="$user_path"
-            fi
+    fi
+
+    if [[ -z "${path_found}" ]] && command -v sudo >/dev/null 2>&1 && [[ -n "${CURRENT_USER:-}" ]] && [[ "${CURRENT_USER}" != "$(whoami)" ]]; then
+        local user_path=""
+        user_path="$(sudo -u "${CURRENT_USER}" command -v "${cmd}" 2>/dev/null || true)"
+        if [[ -n "${user_path}" ]]; then
+            path_found="${user_path}"
         fi
     fi
 
-    if [ -z "$path_found" ]; then
-        # icône et couleur pour absence
-        local icon_absent="❌"
-        # Tentative : exécuter la commande via un shell de l'utilisateur (bash/zsh)
-        if command -v sudo >/dev/null 2>&1 && [ -n "${CURRENT_USER:-}" ]; then
-            local shells=(bash zsh)
-            for sh in "${shells[@]}"; do
-                if sudo -H -u "$CURRENT_USER" command -v "$sh" >/dev/null 2>&1; then
-                    local s_out
-                    # Source les fichiers de config usuels de l'utilisateur avant d'exécuter la commande
-                    if [ "$sh" = "zsh" ]; then
-                        s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.zshrc\" 2>/dev/null || true; source \"\$HOME/.zprofile\" 2>/dev/null || true; $cmd --version" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.zshrc\" 2>/dev/null || true; source \"\$HOME/.zprofile\" 2>/dev/null || true; $cmd -v" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.zshrc\" 2>/dev/null || true; source \"\$HOME/.zprofile\" 2>/dev/null || true; $cmd version" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.zshrc\" 2>/dev/null || true; source \"\$HOME/.zprofile\" 2>/dev/null || true; $cmd -V" 2>&1) || s_out=""
-                    else
-                        s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.bashrc\" 2>/dev/null || true; source \"\$HOME/.profile\" 2>/dev/null || true; $cmd --version" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.bashrc\" 2>/dev/null || true; source \"\$HOME/.profile\" 2>/dev/null || true; $cmd -v" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.bashrc\" 2>/dev/null || true; source \"\$HOME/.profile\" 2>/dev/null || true; $cmd version" 2>&1) || s_out=$(sudo -H -u "$CURRENT_USER" "$sh" -lc "source \"\$HOME/.bashrc\" 2>/dev/null || true; source \"\$HOME/.profile\" 2>/dev/null || true; $cmd -V" 2>&1) || s_out=""
-                    fi
-                    if [ -n "$(echo "$s_out" | sed -n '1p' | sed -e '/not found/d' -e '/command not found/d')" ]; then
-                        out=$(echo "$s_out" | head -n1)
-                        # Found via user's shell
-                        local icon="🔹"
-                        local col_cmd="$CYAN"
-                        case "$cmd" in
-                            curl) icon="🌊"; col_cmd="\033[36m" ;;
-                            wget) icon="⬇️"; col_cmd="\033[35m" ;;
-                            git) icon="🐙"; col_cmd="\033[34m" ;;
-                            zsh) icon="💠"; col_cmd="\033[35m" ;;
-                                bat) icon="📚"; col_cmd="\033[33m" ;;
-                                less) icon="📘"; col_cmd="\033[36m" ;;
-                            btop) icon="📈"; col_cmd="\033[33m" ;;
-                            eza) icon="📁"; col_cmd="\033[36m" ;;
-                            rg|ripgrep) icon="🔎"; col_cmd="\033[36m" ;;
-                            zoxide) icon="🧭"; col_cmd="\033[36m" ;;
-                            duf) icon="📊"; col_cmd="\033[36m" ;;
-                            direnv) icon="🛡️"; col_cmd="\033[36m" ;;
-                            atuin) icon="🛰️"; col_cmd="\033[36m" ;;
-                            micro) icon="✍️"; col_cmd="\033[32m" ;;
-                            brew) icon="🍺"; col_cmd="\033[33m" ;;
-                            gcc) icon="🔧"; col_cmd="\033[33m" ;;
-                            apt-get) icon="📦"; col_cmd="\033[33m" ;;
-                            *) icon="🔹"; col_cmd="$CYAN" ;;
-                        esac
-                        echo -e "   ${icon} ${BOLD}${col_cmd}${cmd}${RESET} : ${GREEN}${out}${RESET}"
-                        return
-                    fi
-                fi
-            done
-        fi
-
-        echo -e "   ${icon_absent} ${BOLD}${cmd}${RESET} : ${RED}non installé${RESET}"
-        return
+    if [[ -z "${path_found}" ]]; then
+        printf '   ❌ %b%s%b : %bnon installé%b\n' "${BOLD}" "${cmd}" "${RESET}" "${RED}" "${RESET}"
+        return 0
     fi
 
     local out=""
-    # Tenter d'exécuter la commande directement; si le binaire appartient à l'utilisateur détecté, exécuter via sudo -u
-    if [ "${path_found}" != "$(command -v "$cmd" 2>/dev/null || true)" ] && command -v sudo >/dev/null 2>&1 && [ -n "${CURRENT_USER:-}" ] && [ "$CURRENT_USER" != "$(whoami)" ]; then
-        out=$(sudo -u "$CURRENT_USER" "$path_found" --version 2>&1) || out=$(sudo -u "$CURRENT_USER" "$path_found" -v 2>&1) || out=$(sudo -u "$CURRENT_USER" "$path_found" version 2>&1) || out=$(sudo -u "$CURRENT_USER" "$path_found" -V 2>&1) || out="version inconnue"
+    if [[ "${path_found}" != "$(command -v "${cmd}" 2>/dev/null || true)" ]] && command -v sudo >/dev/null 2>&1 && [[ -n "${CURRENT_USER:-}" ]] && [[ "${CURRENT_USER}" != "$(whoami)" ]]; then
+        out="$(sudo -u "${CURRENT_USER}" "${path_found}" --version 2>&1 || sudo -u "${CURRENT_USER}" "${path_found}" -v 2>&1 || sudo -u "${CURRENT_USER}" "${path_found}" version 2>&1 || sudo -u "${CURRENT_USER}" "${path_found}" -V 2>&1 || printf '%s\n' "version inconnue")"
     else
-        out=$("$path_found" --version 2>&1) || out=$("$path_found" -v 2>&1) || out=$("$path_found" version 2>&1) || out=$("$path_found" -V 2>&1) || out="version inconnue"
+        out="$("${path_found}" --version 2>&1 || "${path_found}" -v 2>&1 || "${path_found}" version 2>&1 || "${path_found}" -V 2>&1 || printf '%s\n' "version inconnue")"
     fi
-    out=$(echo "$out" | head -n1)
-    # Extraire une version concise (passer le nom de la commande pour parsing spécifique)
-    local ver
-    ver=$(extract_version "$out" "$cmd" || true)
+    out="$(printf '%s\n' "${out}" | head -n1)"
 
-    # icônes et couleurs par outil
+    local ver
+    ver="$(extract_version "${out}" "${cmd}" || true)"
+
     local icon="🔹"
-    local col_cmd="$CYAN"
-    case "$cmd" in
+    local col_cmd="${CYAN}"
+    case "${cmd}" in
         curl) icon="🌊"; col_cmd="\033[36m" ;;
         wget) icon="⬇️"; col_cmd="\033[35m" ;;
-        git) icon="🐙"; col_cmd="\033[34m" ;;
-        zsh) icon="💠"; col_cmd="\033[35m" ;;
-        bat) icon="📚"; col_cmd="\033[33m" ;;
+        git)  icon="🐙"; col_cmd="\033[34m" ;;
+        zsh)  icon="💠"; col_cmd="\033[35m" ;;
+        bat)  icon="📚"; col_cmd="\033[33m" ;;
         less) icon="📘"; col_cmd="\033[36m" ;;
         btop) icon="📈"; col_cmd="\033[33m" ;;
-        eza) icon="📁"; col_cmd="\033[36m" ;;
+        eza)  icon="📁"; col_cmd="\033[36m" ;;
         rg|ripgrep) icon="🔎"; col_cmd="\033[36m" ;;
         zoxide) icon="🧭"; col_cmd="\033[36m" ;;
-        duf) icon="📊"; col_cmd="\033[36m" ;;
+        duf)    icon="📊"; col_cmd="\033[36m" ;;
         direnv) icon="🛡️"; col_cmd="\033[36m" ;;
-        python|python3) icon="🐍"; col_cmd="\033[35m" ;;
-        node|nodejs) icon="🔵"; col_cmd="\033[36m" ;;
-        docker) icon="🐳"; col_cmd="\033[34m" ;;
-        atuin) icon="🛰️"; col_cmd="\033[36m" ;;
-        cat) icon="📄"; col_cmd="\033[36m" ;;
-        micro) icon="✍️"; col_cmd="\033[32m" ;;
-        brew) icon="🍺"; col_cmd="\033[33m" ;;
-        gcc) icon="🔧"; col_cmd="\033[33m" ;;
-        apt-get) icon="📦"; col_cmd="\033[33m" ;;
-        *) icon="🔹"; col_cmd="$CYAN" ;;
+        atuin)  icon="🛰️"; col_cmd="\033[36m" ;;
+        micro)  icon="✍️"; col_cmd="\033[32m" ;;
+        brew)   icon="🍺"; col_cmd="\033[33m" ;;
+        gcc)    icon="🔧"; col_cmd="\033[33m" ;;
+        apt-get)icon="📦"; col_cmd="\033[33m" ;;
     esac
 
-    if [ -n "${ver:-}" ] && [ "${ver}" != "version inconnue" ]; then
-        echo -e "   ${icon} ${BOLD}${col_cmd}${cmd}${RESET} : ${GREEN}${ver}${RESET}"
+    if [[ -n "${ver:-}" ]] && [[ "${ver}" != "version inconnue" ]]; then
+        printf '   %s %b%s%b : %b%s%b\n' "${icon}" "${BOLD}" "${col_cmd}" "${cmd}" "${RESET}" "${GREEN}" "${ver}" "${RESET}"
     else
-        echo -e "   ${icon} ${BOLD}${col_cmd}${cmd}${RESET} : ${GREEN}${out}${RESET}"
+        printf '   %s %b%s%b : %b%s%b\n' "${icon}" "${BOLD}" "${col_cmd}" "${cmd}" "${RESET}" "${GREEN}" "${out}" "${RESET}"
     fi
 }
 
 show_versions() {
-    # Header stylé (avec couleur si le terminal le supporte)
     local RESET="\033[0m"
     local BLUE="\033[34m"
-    if declare -f section >/dev/null 2>&1; then
-        # utilise la fonction section (déjà stylée)
-        section "VERSIONS INSTALLÉES"
-    else
-        echo -e "${BLUE}📦 ═══════════════════════════════════════════════════════════════════════════════${RESET}"
-        echo -e "${BLUE}📦                           VERSIONS INSTALLÉES${RESET}"
-        echo -e "${BLUE}📦 ═══════════════════════════════════════════════════════════════════════════════${RESET}"
-    fi
+    printf '%b📦 ═══════════════════════════════════════════════════════════════════════════════%b\n' "${BLUE}" "${RESET}"
+    printf '%b📦                           VERSIONS INSTALLÉES%b\n' "${BLUE}" "${RESET}"
+    printf '%b📦 ═══════════════════════════════════════════════════════════════════════════════%b\n' "${BLUE}" "${RESET}"
 
     local cmds=(curl wget git zsh bat less btop eza rg zoxide duf direnv atuin micro cat brew python node docker gcc apt-get)
     for c in "${cmds[@]}"; do
-        try_version "$c"
+        try_version "${c}"
     done
 
-    # Déterminer la version d'oh-my-zsh
-    if [ -d "$HOME_DIR/.oh-my-zsh" ]; then
+    if [[ -d "${HOME_DIR}/.oh-my-zsh" ]]; then
         local omz_ver="installé"
-        if [ -d "$HOME_DIR/.oh-my-zsh/.git" ]; then
-            # Essayer de récupérer le commit short ou le tag
-            omz_ver=$(cd "$HOME_DIR/.oh-my-zsh" 2>/dev/null && (git describe --tags --always 2>/dev/null || git rev-parse --short HEAD 2>/dev/null) || echo "installé")
+        if [[ -d "${HOME_DIR}/.oh-my-zsh/.git" ]]; then
+            omz_ver="$(cd "${HOME_DIR}/.oh-my-zsh" 2>/dev/null && (git describe --tags --always 2>/dev/null || git rev-parse --short HEAD 2>/dev/null) || printf '%s' "installé")"
         fi
-        echo -e "   📂 \033[1moh-my-zsh\033[0m : \033[32m$omz_ver\033[0m"
+        printf '   📂 \033[1moh-my-zsh\033[0m : \033[32m%s\033[0m\n' "${omz_ver}"
     else
-        echo -e "   📂 \033[1moh-my-zsh\033[0m : \033[31mnon installé\033[0m"
+        printf '   📂 \033[1moh-my-zsh\033[0m : \033[31mnon installé\033[0m\n'
     fi
-    echo ""
+    printf '\n'
 }
 
-# Menu interactif
-echo "📋 Choisissez une option :"
-echo "   1) 🛠️  Installation de base (Zsh + outils essentiels)"
-echo "   2) 🐚 Installation Oh My Zsh (sh -c .../install.sh)"
-echo "   3) 🍺 Installation Homebrew (Linux non-root)"
-echo "   4) 🔥 Installation complète (1+2+3)"
-echo "   5) 🔍 Afficher les versions des éléments installés (contrôle)"
-echo "   6) ❌ Quitter sans exécuter le script"
-echo ""
-read -p "Votre choix (1-6) [1] : " CHOICE
-CHOICE=${CHOICE:-1}
+# ─── Pre-flight Checks ────────────────────────────────────────────────────────
+if ! command -v apt-get >/dev/null 2>&1; then
+    log_error "Compatible Debian/Ubuntu uniquement"
+    exit 1
+fi
 
-# Initialisation des flags d'option pour éviter 'unbound variable' avec set -u
+if ! command -v sudo >/dev/null 2>&1; then
+    log_error "Installez sudo d'abord"
+    exit 1
+fi
+
+# ─── Interactive or Auto Mode ─────────────────────────────────────────────────
+CHOICE=""
+if [[ "${AUTO_YES}" -eq 1 ]]; then
+    CHOICE="4"
+    log_info "Auto-yes enabled: selecting option 4 (complete install)"
+else
+    printf '👤 Utilisateur détecté : %s\n' "${CURRENT_USER}"
+    printf '🏠 Home : %s\n\n' "${HOME_DIR}"
+
+    printf '📋 Choisissez une option :\n'
+    printf '   1) 🛠️  Installation de base (Zsh + outils essentiels)\n'
+    printf '   2) 🐚 Installation Oh My Zsh\n'
+    printf '   3) 🍺 Installation Homebrew (Linux non-root)\n'
+    printf '   4) 🔥 Installation complète (1+2+3)\n'
+    printf '   5) 🔍 Afficher les versions des éléments installés (contrôle)\n'
+    printf '   6) ❌ Quitter sans exécuter le script\n\n'
+    read -rp "Votre choix (1-6) [1] : " CHOICE
+    CHOICE="${CHOICE:-1}"
+fi
+
 BASE=0
 OMZ=0
 BREW=0
 
-case $CHOICE in
+case "${CHOICE}" in
     1) BASE=1 ;;
     2) OMZ=1 ;;
     3) BREW=1 ;;
     4) BASE=1; OMZ=1; BREW=1 ;;
     5)
-        # Affiche les versions et quitte sans lancer d'installation
         show_versions
         exit 0
         ;;
     6)
-        echo "⚠️  Sortie demandée : le script ne sera pas exécuté."
+        log_info "Sortie demandée : le script ne sera pas exécuté."
         exit 0
         ;;
-    *) echo "❌ Option invalide. Quit."; exit 1 ;;
+    *)
+        log_error "Option invalide."
+        exit 1
+        ;;
 esac
 
-echo ""
-echo "🚀 Début installation... ($CHOICE sélectionné)"
-echo ""
-
-# Vérifications
-if ! command -v apt-get >/dev/null 2>&1; then
-    echo " ❌ Compatible Debian/Ubuntu uniquement"
-    exit 1
-fi
-
-if ! command -v sudo >/dev/null 2>&1; then
-    echo " ❌ Installez sudo d'abord"
-    exit 1
-fi
-
-# Fonctions
-section() {
-    echo ""
-    echo "📦 ═══════════════════════════════════════════════════════════════════════════════"
-    echo "📦                           $1"
-    echo "📦 ═══════════════════════════════════════════════════════════════════════════════"
-}
-
-apt_install() {
-    local pkg="$1" count="$2" total="$3"
-    if sudo apt-get install -y "$pkg" >/dev/null 2>&1; then
-        echo "   ($count/$total) ✅ $pkg"
-    else
-        echo "   ($count/$total) ❌ $pkg"
-    fi
-}
-
-append_to_rc() {
-    local base file
-    base=$(basename "$1")
-    if [[ "$base" != .* ]]; then
-        base=".$base"
-    fi
-    file="$HOME_DIR/$base"
-    echo "# $(date): $2" >> "$file"
-    echo "$3" >> "$file"
-    sudo chown "$CURRENT_USER:$CURRENT_USER" "$file" 2>/dev/null || true
-    echo "✅ $file mis à jour"
-}
+log_info "Début installation... (${CHOICE} sélectionné)"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 📦 PRÉREQUIS ✅ COMPTEURS (7 paquets)
+# 📦 PRÉREQUIS
 # ═══════════════════════════════════════════════════════════════════════════════
-section "PRÉREQUIS (7 paquets)"
-PACKAGES="curl wget git zsh build-essential procps file locales-all"
-i=0; total=7
+section "PRÉREQUIS"
 
-# Update once before installing packages
-sudo apt-get update -y >/dev/null 2>&1
-for pkg in $PACKAGES; do
-    i=$((i+1))
-    apt_install "$pkg" "$i" "$total"
+PACKAGES=(curl wget git zsh build-essential procps file locales-all)
+readonly TOTAL_PREREQS="${#PACKAGES[@]}"
+
+if [[ "${DRY_RUN}" -eq 0 ]]; then
+    sudo apt-get update -y >/dev/null 2>&1
+fi
+
+i=0
+for pkg in "${PACKAGES[@]}"; do
+    i=$((i + 1))
+    apt_install "${pkg}" "${i}" "${TOTAL_PREREQS}"
 done
-echo " ✅ Tous les prérequis installés !"
-echo ""
+log_info "Prérequis traités."
 
+# ═══════════════════════════════════════════════════════════════════════════════
 # 1. Installation de base
-if [ "${BASE:-0}" = 1 ]; then
+# ═══════════════════════════════════════════════════════════════════════════════
+if [[ "${BASE}" -eq 1 ]]; then
     section "INSTALLATION DE BASE"
-    apt_install "less" "1" "7"
-    apt_install "btop" "2" "7"
-    apt_install "eza" "3" "7"
+    apt_install "less"  "1" "7"
+    apt_install "btop"  "2" "7"
+    apt_install "eza"   "3" "7"
     apt_install "ripgrep" "4" "7"
     apt_install "zoxide" "5" "7"
-    apt_install "duf" "6" "7"
+    apt_install "duf"   "6" "7"
     apt_install "direnv" "7" "7"
-    
-    # Atuin
-    echo "🤖 Atuin..."
-    bash <(curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh)
-    append_to_rc ".zshrc" "atuin" 'eval "$(atuin init zsh)"'
-    
+
+    # Atuin — téléchargement vers tmp, pas de curl|sh direct
+    log_info "Atuin..."
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log_info "[dry-run] Would download and install atuin"
+    else
+        atuin_script="${SCRIPT_TMPDIR}/atuin-install.sh"
+        if curl --proto '=https' --tlsv1.2 -sSfL "https://setup.atuin.sh" -o "${atuin_script}"; then
+            bash "${atuin_script}"
+        else
+            log_warn "Failed to download atuin installer"
+        fi
+    fi
+    append_unique_to_rc ".zshrc" "atuin" 'eval "$(atuin init zsh)"'
+
     # Micro
-    echo "🤖 Micro..."
-    sudo mkdir -p /usr/local/bin
-    cd /usr/local/bin && curl https://getmic.ro | bash
-    echo "✅ Micro installé"
-    echo ""
+    log_info "Micro..."
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log_info "[dry-run] Would install micro to /usr/local/bin"
+    else
+        sudo mkdir -p /usr/local/bin
+        micro_script="${SCRIPT_TMPDIR}/micro-install.sh"
+        if curl -sSfL "https://getmic.ro" -o "${micro_script}"; then
+            (cd /usr/local/bin && sudo bash "${micro_script}")
+        else
+            log_warn "Failed to download micro installer"
+        fi
+    fi
+    log_info "Micro installé"
 fi
 
+# ═══════════════════════════════════════════════════════════════════════════════
 # 2. Oh My Zsh
-if [ "${OMZ:-0}" = 1 ]; then
+# ═══════════════════════════════════════════════════════════════════════════════
+if [[ "${OMZ}" -eq 1 ]]; then
     section "OH MY ZSH"
-    echo "🤖 Oh My Zsh (officiel)..."
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-    
-    # Copie vers utilisateur actif
-    sudo cp -rf /root/.oh-my-zsh "$HOME_DIR/" 2>/dev/null || true
-    sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$HOME_DIR/.oh-my-zsh" 2>/dev/null || true
-    
-    # Thème JONATHAN par défaut ✅
-    sudo -u "$CURRENT_USER" bash -c "mkdir -p '$HOME_DIR/.oh-my-zsh/custom/plugins'"
-    sed -i 's/robbyrussell/jonathan/g' "$HOME_DIR/.zshrc" 2>/dev/null || true
-    
+    log_info "Oh My Zsh (officiel)..."
+
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log_info "[dry-run] Would install Oh My Zsh for ${CURRENT_USER}"
+    else
+        omz_script="${SCRIPT_TMPDIR}/omz-install.sh"
+        if curl -fsSL "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh" -o "${omz_script}"; then
+            sudo -u "${CURRENT_USER}" bash "${omz_script}" "" --unattended
+        else
+            log_error "Failed to download Oh My Zsh installer"
+            exit 1
+        fi
+    fi
+
+    if [[ "${DRY_RUN}" -eq 0 ]]; then
+        sudo -u "${CURRENT_USER}" bash -c "mkdir -p '${HOME_DIR}/.oh-my-zsh/custom/plugins'"
+        if [[ -f "${HOME_DIR}/.zshrc" ]]; then
+            backup_file "${HOME_DIR}/.zshrc"
+            sed -i 's/robbyrussell/jonathan/g' "${HOME_DIR}/.zshrc" 2>/dev/null || true
+        fi
+    fi
+
     # Plugins
-    sudo -u "$CURRENT_USER" git clone https://github.com/zsh-users/zsh-autosuggestions "$HOME_DIR/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-    sudo -u "$CURRENT_USER" git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$HOME_DIR/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
-    
-    # Ajout plugins au .zshrc
-    {
-        echo 'plugins=(git zsh-autosuggestions zsh-syntax-highlighting sudo)'
-        echo 'source $HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh'
-        echo 'export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#808080"'
-        echo 'source $HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh'
-        echo 'if command -v bat >/dev/null 2>&1; then'
-        echo '  alias cat="bat --style=header --paging=never"'
-        echo 'elif command -v batcat >/dev/null 2>&1; then'
-        echo '  alias cat="batcat --style=header --paging=never"'
-        echo 'elif command -v less >/dev/null 2>&1; then'
-        echo '  alias cat="less -R"'
-        echo 'else'
-        echo '  alias cat="cat"'
-        echo 'fi'
-        echo 'alias grep=rg'
-        echo 'eval "$(zoxide init zsh)"'
-        echo 'eval "$(direnv hook zsh)"'
-        echo 'alias relbash="source ~/.zshrc"'
-        echo 'alias zshconfig="sudo nano ~/.zshrc"'
-        echo 'alias cls="clear"'
-        echo 'maj() { echo "🍓  Mise à jour complète Raspberry Pi OS 🍀"; echo "──────────────────────────────────────────"; echo -e "\n📦  Mise à jour des dépôts APT..."; sudo apt-get update -y; echo -e "\n⚙️  Installation des mises à jour disponibles..."; sudo apt-get upgrade -y; echo -e "\n🚀  Mise à niveau de la distribution..."; sudo apt-get dist-upgrade -y; echo -e "\n🔧  Mise à jour du firmware Raspberry Pi..."; sudo rpi-update; echo -e "\n🧹  Nettoyage des paquets obsolètes..."; sudo apt-get autoremove -y; sudo apt-get autoclean -y; sudo apt-get clean; echo -e "\n☕️  Mise à jour Homebrew..."; brew update; echo -e "\n📦  Mise à niveau des paquets Homebrew..."; brew upgrade; echo -e "\n🧹  Nettoyage Homebrew..."; brew autoremove; echo -e "\n🏁  Mise à jour terminée avec succès ! 🎉"; echo "──────────────────────────────────────────"; }'
-    } >> "$HOME_DIR/.zshrc"
-    
-    sudo chown "$CURRENT_USER:$CURRENT_USER" "$HOME_DIR/.zshrc"
-    echo "✅ Oh My Zsh + thème JONATHAN + plugins + aliases pour $CURRENT_USER"
-    echo ""
+    omz_custom="${HOME_DIR}/.oh-my-zsh/custom/plugins"
+    if [[ "${DRY_RUN}" -eq 0 ]]; then
+        if [[ ! -d "${omz_custom}/zsh-autosuggestions" ]]; then
+            sudo -u "${CURRENT_USER}" git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions "${omz_custom}/zsh-autosuggestions"
+        fi
+        if [[ ! -d "${omz_custom}/zsh-syntax-highlighting" ]]; then
+            sudo -u "${CURRENT_USER}" git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git "${omz_custom}/zsh-syntax-highlighting"
+        fi
+    fi
+
+    payload=$'plugins=(git zsh-autosuggestions zsh-syntax-highlighting sudo)\nsource "$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"\nexport ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#808080"\nsource "$HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"\nif command -v bat >/dev/null 2>&1; then\n  alias cat="bat --style=header --paging=never"\nelif command -v batcat >/dev/null 2>&1; then\n  alias cat="batcat --style=header --paging=never"\nelif command -v less >/dev/null 2>&1; then\n  alias cat="less -R"\nfi\nalias grep=rg\neval "$(zoxide init zsh)"\neval "$(direnv hook zsh)"\nalias relbash="source ~/.zshrc"\nalias zshconfig="nano ~/.zshrc"\nalias cls="clear"'
+
+    append_unique_to_rc ".zshrc" "oh-my-zsh aliases and plugins" "${payload}"
+
+    maj_payload='maj() { echo "🍓  Mise à jour complète"; echo "──────────────────────────────────────────"; echo -e "\n📦  Mise à jour des dépôts APT..."; sudo apt-get update -y; echo -e "\n⚙️  Installation des mises à jour disponibles..."; sudo apt-get upgrade -y; echo -e "\n🚀  Mise à niveau de la distribution..."; sudo apt-get dist-upgrade -y; if command -v brew >/dev/null 2>&1; then echo -e "\n☕️  Mise à jour Homebrew..."; brew update; echo -e "\n📦  Mise à niveau des paquets Homebrew..."; brew upgrade; echo -e "\n🧹  Nettoyage Homebrew..."; brew autoremove; fi; echo -e "\n🧹  Nettoyage des paquets obsolètes..."; sudo apt-get autoremove -y; sudo apt-get autoclean -y; sudo apt-get clean; echo -e "\n🏁  Mise à jour terminée avec succès ! 🎉"; echo "──────────────────────────────────────────"; }'
+    append_unique_to_rc ".zshrc" "maj update function" "${maj_payload}"
+
+    chown "${CURRENT_USER}:${CURRENT_USER}" "${HOME_DIR}/.zshrc" 2>/dev/null || true
+    log_info "Oh My Zsh + thème JONATHAN + plugins + aliases pour ${CURRENT_USER}"
 fi
 
-# 3. Homebrew ✅ OFFICIEL
-if [ "${BREW:-0}" = 1 ]; then
+# ═══════════════════════════════════════════════════════════════════════════════
+# 3. Homebrew
+# ═══════════════════════════════════════════════════════════════════════════════
+if [[ "${BREW}" -eq 1 ]]; then
     section "HOMEBREW (Linux)"
     if command -v brew >/dev/null 2>&1; then
-        echo "✅ Homebrew déjà installé"
+        log_info "Homebrew déjà installé"
     else
-        echo "🤖 Homebrew pour $CURRENT_USER..."
-        NONINTERACTIVE=1 sudo -u "$CURRENT_USER" /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-        
-        # Next steps OFFICIELS
-        echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> "$HOME_DIR/.zshrc"
-        sudo chown "$CURRENT_USER:$CURRENT_USER" "$HOME_DIR/.zshrc"
-        
-        # Dépendances + GCC
-        sudo apt-get install -y build-essential
-        if command -v brew >/dev/null 2>&1; then
-            brew install gcc
+        log_info "Homebrew pour ${CURRENT_USER}..."
+        if [[ "${DRY_RUN}" -eq 1 ]]; then
+            log_info "[dry-run] Would install Homebrew"
+        else
+            brew_script="${SCRIPT_TMPDIR}/brew-install.sh"
+            if curl -fsSL "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh" -o "${brew_script}"; then
+                NONINTERACTIVE=1 sudo -u "${CURRENT_USER}" /bin/bash "${brew_script}"
+            else
+                log_error "Failed to download Homebrew installer"
+                exit 1
+            fi
         fi
-        
-        echo "✅ Homebrew → /home/linuxbrew/.linuxbrew/bin/brew"
+
+        append_unique_to_rc ".zshrc" "homebrew shellenv" 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"'
+        chown "${CURRENT_USER}:${CURRENT_USER}" "${HOME_DIR}/.zshrc" 2>/dev/null || true
+
+        if [[ "${DRY_RUN}" -eq 0 ]]; then
+            sudo apt-get install -y build-essential
+            if command -v brew >/dev/null 2>&1; then
+                brew install gcc
+            fi
+        fi
+        log_info "Homebrew -> /home/linuxbrew/.linuxbrew/bin/brew"
     fi
-    echo ""
 fi
 
-# Shell par défaut (changer uniquement si zsh présent)
-ZSH_BIN=$(command -v zsh || true)
-if [ -n "$ZSH_BIN" ]; then
-    sudo chsh -s "$ZSH_BIN" "$CURRENT_USER" 2>/dev/null || true
+# ═══════════════════════════════════════════════════════════════════════════════
+# 4. Default Shell
+# ═══════════════════════════════════════════════════════════════════════════════
+ZSH_BIN=""
+ZSH_BIN="$(command -v zsh || true)"
+if [[ -n "${ZSH_BIN}" ]]; then
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log_info "[dry-run] Would set ${ZSH_BIN} as default shell for ${CURRENT_USER}"
+    else
+        sudo chsh -s "${ZSH_BIN}" "${CURRENT_USER}" 2>/dev/null || true
+    fi
 else
-    echo "⚠️  zsh introuvable, chsh ignoré"
+    log_warn "zsh introuvable, chsh ignoré"
 fi
 
-# Lancement OMZ automatique
-echo "🚀 Lancement Oh My Zsh..."
-sudo -u "$CURRENT_USER" zsh -l
+# ═══════════════════════════════════════════════════════════════════════════════
+# 5. Launch OMZ if installed
+# ═══════════════════════════════════════════════════════════════════════════════
+if [[ "${OMZ}" -eq 1 ]] && [[ "${DRY_RUN}" -eq 0 ]]; then
+    log_info "Lancement Oh My Zsh..."
+    sudo -u "${CURRENT_USER}" zsh -l || true
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 🎉 TERMINÉ !
 # ═══════════════════════════════════════════════════════════════════════════════
 section "INSTALLATION TERMINÉE !"
-echo "✅ Configuration appliquée pour : $CURRENT_USER"
-echo ""
-echo "📋 Vérifications :"
-echo "   • Zsh : zsh --version"
-echo "   • OMZ : ls ~/.oh-my-zsh"
-echo "   • Brew: brew --version"
-echo "   • Atuin: atuin register"
-echo "   • Alias: relbash, zshconfig, maj"
-echo ""
-echo "🚀 Déjà lancé dans Oh My Zsh avec thème JONATHAN ! (Ctrl+D pour quitter)"
-echo ""
-echo "🔥 ═══════════════════════════════════════════════════════════════════════════════"
+log_info "Configuration appliquée pour : ${CURRENT_USER}"
+printf '\n📋 Vérifications :\n'
+printf '   • Zsh : zsh --version\n'
+printf '   • OMZ : ls ~/.oh-my-zsh\n'
+printf '   • Brew: brew --version\n'
+printf '   • Atuin: atuin register\n'
+printf '   • Alias: relbash, zshconfig, maj\n\n'
+if [[ "${OMZ}" -eq 1 ]]; then
+    printf '🚀 Déjà lancé dans Oh My Zsh avec thème JONATHAN ! (Ctrl+D pour quitter)\n'
+fi
+printf '🔥 ═══════════════════════════════════════════════════════════════════════════════\n'
