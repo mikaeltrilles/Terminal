@@ -8,8 +8,8 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # ─── Guards ───────────────────────────────────────────────────────────────────
-if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
-    echo "ERROR: This script must be run, not sourced" >&2
+if [[ "${BASH_SOURCE[0]:-}" != "${0}" ]]; then
+    echo "ERROR: This script must be saved to a file and executed directly (not piped or sourced)" >&2
     exit 1
 fi
 
